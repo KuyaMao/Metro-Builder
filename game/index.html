@@ -227,7 +227,7 @@ button:active:not(:disabled){transform:scale(.95)}
     <button id="mCont" style="display:none">Continue<small id="mContInfo"></small></button>
     <button id="mSand">Sandbox<small>Unlimited money, everything unlocked</small></button>
     <button id="mCareer">Career<small>Start small, grow to unlock services and transit</small></button>
-    <button id="mGfx">Graphics: High<small>Switch to Low for older phones</small></button>
+    <button id="mGfx">Graphics: High<small>Ultra for gaming laptops · High or Low for older PCs</small></button>
   </div>
 </div>
 
@@ -362,7 +362,10 @@ const wx = x => x - N/2 + 0.5;
 
 /* ---------- three setup ---------- */
 const canvas = $('c');
-const renderer = new THREE.WebGLRenderer({canvas, antialias:true});
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true, powerPreference:'high-performance'});
+// which graphics chip is drawing the game (shown in Settings; picks the default quality)
+const GPU_NAME=(()=>{try{const gl=renderer.getContext(),e=gl.getExtension('WEBGL_debug_renderer_info');return e?gl.getParameter(e.UNMASKED_RENDERER_WEBGL):gl.getParameter(gl.RENDERER);}catch(err){return '';}})();
+const GPU_FAST=/nvidia|geforce|radeon|rtx|gtx|\bamd\b|arc a/i.test(GPU_NAME),GPU_IGPU=/intel|uhd|iris|hd graphics/i.test(GPU_NAME)&&!GPU_FAST;
 renderer.setPixelRatio(Math.min(devicePixelRatio,1.75));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -1556,7 +1559,14 @@ const envScene=new THREE.Scene();
 {const g=new THREE.SphereGeometry(10,32,16),c=[],p=g.attributes.position;for(let i=0;i<p.count;i++){const y=p.getY(i)/10;const col=y>0?new THREE.Color(0x9cc8e8).lerp(new THREE.Color(0xf4f8ff),Math.max(0,1-y*2)):new THREE.Color(0x4a5a40).lerp(new THREE.Color(0x8a9580),1+y);c.push(col.r,col.g,col.b);}
  g.setAttribute('color',new THREE.Float32BufferAttribute(c,3));envScene.add(new THREE.Mesh(g,new THREE.MeshBasicMaterial({vertexColors:true,side:THREE.BackSide})));
  const sunD=new THREE.Mesh(new THREE.SphereGeometry(1,8,8),new THREE.MeshBasicMaterial({color:0xffffff}));sunD.position.set(5,7,3);envScene.add(sunD);}
-const envMap=new THREE.PMREMGenerator(renderer).fromScene(envScene,.02).texture;
+const pmrem=new THREE.PMREMGenerator(renderer);let envRT=pmrem.fromScene(envScene,.02);const envMap=envRT.texture;
+const envSky=envScene.children[0],_ec=new THREE.Color(),_et=new THREE.Color(),_eh=new THREE.Color(),_eg=new THREE.Color(0x4a5a40);let envDay=-1;
+// re-light the reflection sphere with the current sky colours, then copy the result into the shared environment texture
+function updateEnv(top,hor,day){if(Math.abs(day-envDay)<.06)return;envDay=day;const g=envSky.geometry,p=g.attributes.position,c=g.attributes.color;
+  _eg.setHex(0x4a5a40).multiplyScalar(.35+.65*day);for(let i=0;i<p.count;i++){const y=p.getY(i)/10;if(y>0)_ec.copy(top).lerp(hor,Math.max(0,1-y*2));else _ec.copy(_eg).lerp(hor,Math.max(0,1+y*3)*.6);c.setXYZ(i,_ec.r,_ec.g,_ec.b);}
+  c.needsUpdate=true;envScene.children[1].visible=day>.2;const rt=pmrem.fromScene(envScene,.02);
+  for(const m of envUsers){m.envMap=rt.texture;m.needsUpdate=true;}if(envRT)envRT.dispose();envRT=rt;}
+const envUsers=[];
 const paintMat=new THREE.MeshPhysicalMaterial({vertexColors:true,roughness:.32,metalness:.5,clearcoat:1,clearcoatRoughness:.06,envMap});
 const detMat=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.7,metalness:.05});
 const chromeMat=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.16,metalness:1,envMap});
@@ -1564,6 +1574,7 @@ const glassMat=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.03,m
 const glassOMat=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.04,metalness:.85,envMap});
 const headMat=new THREE.MeshBasicMaterial({vertexColors:true});
 const tailMat=new THREE.MeshBasicMaterial({vertexColors:true});
+envUsers.push(paintMat,chromeMat,glassMat,glassOMat);WALL.glass.envMap=envMap;WALL.glass.envMapIntensity=.9;envUsers.push(WALL.glass);
 const MATS={paint:paintMat,det:detMat,chrome:chromeMat,glass:glassMat,glassO:glassOMat,head:headMat,tail:tailMat};
 const VTYPES=[
   {id:'pickup',n:12,sp:1.15,P:passenger(PICKUP),o:PICKUP,cols:[0xf2f2f2,0x8a1c1c,0x2b2f33,0x9aa3ab,0x1d3f6e,0x6e5a3a]},
@@ -2920,6 +2931,8 @@ function openBudget(){
 function openSettings(){
   sheet.innerHTML=`<button class="close" id="eClose">Close</button><h2>Settings</h2>
   <label>Time of day</label><div class="chips"><button id="dv" class="${clockMode==='device'?'on':''}">Computer clock</button><button id="dn" class="${clockMode==='cycle'?'on':''}">Fast cycle</button><button id="dl" class="${clockMode==='day'?'on':''}">Always day</button></div><small style="color:var(--mute)">Computer clock follows your PC time: sunrise 6 AM, sunset 6 PM. Headlights switch on at dusk.</small>
+  <label>Graphics</label><div class="chips">${['ultra','high','low'].map(k=>`<button data-gq="${k}" class="${gfxQ===k?'on':''}">${{ultra:'Ultra',high:'High',low:'Low'}[k]}</button>`).join('')}<button id="gDof" class="${POST.dof?'on':''}">Tilt-shift blur</button></div>
+  <small style="color:var(--mute);display:block">Graphics card in use: <b style="color:${GPU_IGPU?'#ffb74d':'var(--ink)'}">${GPU_NAME||'unknown'}</b>${GPU_IGPU?'<br>This is the built-in Intel chip. If your laptop also has an NVIDIA card, open Windows Settings → System → Display → Graphics, add Metro Builder and choose <b>High performance</b>, then restart the game.':''}</small>
   <label>Traffic lights</label><div class="vol"><span>Green: <b id="tlgV">${(G&&G.tlg)||8} s</b></span><input type="range" id="tlG" min="3" max="60" value="${(G&&G.tlg)||8}"><span>Yellow: <b id="tlaV">${(G&&G.tla)||2} s</b></span><input type="range" id="tlA" min="1" max="6" value="${(G&&G.tla)||2}"></div><small style="color:var(--mute)">How long each direction gets green, and how long the yellow light lasts before red. Applies to every junction in this city.</small>
   <label>Sound</label><div class="vol"><span>Master</span><input type="range" id="vM" min="0" max="100" value="${Math.round(Snd.vol.m*100)}"><span>Music</span><input type="range" id="vMu" min="0" max="100" value="${Math.round(Snd.vol.mu*100)}"><span>Effects</span><input type="range" id="vS" min="0" max="100" value="${Math.round(Snd.vol.s*100)}"></div>
   <label>Confirm before building</label><div class="seg"><button id="cfT" class="${confirmMode==='touch'?'on':''}">Touch only</button><button id="cfA" class="${confirmMode==='always'?'on':''}">Always</button><button id="cfN" class="${confirmMode==='never'?'on':''}">Never</button></div><small style="color:var(--mute)">Shows ✓ and ✕ after you drag a road, zone or building, so zooming never builds by accident.</small>
@@ -2932,6 +2945,7 @@ function openSettings(){
   $('fs').onclick=()=>{try{const d=document.documentElement;(document.fullscreenElement?document.exitFullscreen():(d.requestFullscreen||d.webkitRequestFullscreen).call(d)).catch?.(()=>toast('Fullscreen is not available here'));}catch(e){toast('Fullscreen is not available here');}};
   for(const[id,k]of[['vM','m'],['vMu','mu'],['vS','s']]){$(id).oninput=e=>{Snd.vol[k]=e.target.value/100;Snd.apply();};$(id).onchange=()=>Snd.save();}
   if($('tlG')){$('tlG').oninput=e=>{if(G){G.tlg=+e.target.value;$('tlgV').textContent=G.tlg+' s';}};$('tlA').oninput=e=>{if(G){G.tla=+e.target.value;$('tlaV').textContent=G.tla+' s';}};}
+  sheet.querySelectorAll('[data-gq]').forEach(b=>b.onclick=()=>{gfxQ=b.dataset.gq;try{localStorage.setItem('metrob_gfx',gfxQ);}catch(e){}applyGfx();openSettings();});if($('gDof'))$('gDof').onclick=()=>{POST.dof=!POST.dof;try{localStorage.setItem('metrob_dof',POST.dof?'1':'0');}catch(e){}openSettings();};
   const setCF=m=>{confirmMode=m;try{localStorage.setItem('metrob_confirm',m);}catch(e){}openSettings();};$('cfT').onclick=()=>setCF('touch');$('cfA').onclick=()=>setCF('always');$('cfN').onclick=()=>setCF('never');
   $('sv').onclick=()=>{save();toast('Saved');};$('ng').onclick=()=>{save();sheet.classList.remove('open');endTutSilently();ovI=0;updateOverlay();showMenu();};
 }
@@ -3279,7 +3293,7 @@ function buildWorld(){lampsDirty=true;tlDirty=true;
   clearScene();
   const wt=G.tiles.filter(t=>t.water);
   if(waterMesh)scene.remove(waterMesh);
-  waterMesh=new THREE.InstancedMesh(tileGeo,new THREE.MeshStandardMaterial({color:0x2f7fa8,roughness:.16,metalness:.15,transparent:true,opacity:.9,normalMap:waterNorm,normalScale:new THREE.Vector2(.55,.55)}),wt.length);
+  waterMesh=new THREE.InstancedMesh(tileGeo,new THREE.MeshStandardMaterial({color:0x2f7fa8,roughness:.1,metalness:.25,envMap:envRT.texture,envMapIntensity:1.1,transparent:true,opacity:.9,normalMap:waterNorm,normalScale:new THREE.Vector2(.55,.55)}),wt.length);
   wt.forEach((t,i)=>{dummy.position.set(wx(t.x),.005,wx(t.z));dummy.rotation.set(0,0,0);dummy.scale.set(1,1,1);dummy.updateMatrix();waterMesh.setMatrixAt(i,dummy.matrix);});
   waterMesh.receiveShadow=true;scene.add(waterMesh);
   G.tiles.forEach(drawTile);
@@ -3394,10 +3408,10 @@ function renderFrame(nightF){if(!POST.on||!rtMain){renderer.setRenderTarget(null
   uCo.tColor.value=rtMain.texture;uCo.tAO.value=rtAO.texture;uCo.tBloom.value=rtB1.texture;uCo.aoK.value=POST.ao?.85:0;uCo.bloomK.value=POST.bloom?(.25+nightF*.65):0;uCo.night.value=nightF;pass(coMat,rtComp);
   uFi.tColor.value=rtComp.texture;uFi.dof.value=POST.dof?clamp((cam.dist-3)/26,0,1)*3.2*(rtMain.height/1080):0;pass(fiMat,null);}
 // graphics quality: ultra (PC look), high, low
-let gfxQ=(()=>{try{return localStorage.getItem('metrob_gfx')||(matchMedia('(pointer:fine)').matches?'ultra':'high');}catch(e){return 'ultra';}})();
+let gfxQ=(()=>{try{return localStorage.getItem('metrob_gfx')||(GPU_FAST?'ultra':GPU_IGPU?'high':matchMedia('(pointer:fine)').matches?'ultra':'high');}catch(e){return 'ultra';}})();
 try{POST.dof=localStorage.getItem('metrob_dof')!=='0';}catch(e){}
 function applyGfx(){hiGfx=gfxQ!=='low';POST.on=gfxQ==='ultra';renderer.shadowMap.enabled=hiGfx;sun.castShadow=hiGfx;
-  renderer.setPixelRatio(gfxQ==='ultra'?Math.min(devicePixelRatio,2):hiGfx?Math.min(devicePixelRatio,1.75):1);
+  renderer.setPixelRatio(gfxQ==='ultra'?Math.min(devicePixelRatio,1.5):hiGfx?Math.min(devicePixelRatio,1.75):1);
   const sz=2048;if(sun.shadow.mapSize.x!==sz){sun.shadow.mapSize.set(sz,sz);if(sun.shadow.map){sun.shadow.map.dispose();sun.shadow.map=null;}}
   perfLvl=0;Object.values(M).forEach(m=>m.needsUpdate=true);if($('mGfx'))$('mGfx').firstChild.textContent='Graphics: '+{ultra:'Ultra',high:'High',low:'Low'}[gfxQ];resize();}
 
@@ -3421,7 +3435,7 @@ function loop(now){
   sun.intensity=.15+dayF*.95;hemi.intensity=.25+dayF*.55;
   sky.copy(skyNight).lerp(skyDay,dayF);if(dayF>0&&dayF<.7)sky.lerp(skyDusk,(1-Math.abs(dayF-.35)/.35)*.45);
   haze.copy(sky).lerp(hazeDay,dayF*.55);scene.background=haze;scene.fog.color.copy(haze);cloudMat.color.copy(sky).lerp(_cw,dayF*.75+.15);cloudMat.opacity=.5+dayF*.35;
-  skyDome.position.copy(camera.position);skyDome.scale.setScalar(Math.min(1,camera.far*.92/260));skyU.hor.value.copy(sky).lerp(haze,.5).convertSRGBToLinear();skyU.top.value.copy(skyNight).lerp(_skyTop,dayF).convertSRGBToLinear();skyU.night.value=1-dayF;skyU.sunDir.value.set(Math.cos(ang),Math.max(-.2,el),.4);
+  skyDome.position.copy(camera.position);skyDome.scale.setScalar(Math.min(1,camera.far*.92/260));skyU.hor.value.copy(sky).lerp(haze,.5).convertSRGBToLinear();skyU.top.value.copy(skyNight).lerp(_skyTop,dayF).convertSRGBToLinear();skyU.night.value=1-dayF;if(hiGfx){_et.copy(skyNight).lerp(_skyTop,dayF);_eh.copy(sky);updateEnv(_et,_eh,dayF);}if(waterMesh&&waterMesh.material.envMap!==envRT.texture){waterMesh.material.envMap=envRT.texture;waterMesh.material.needsUpdate=true;}skyU.sunDir.value.set(Math.cos(ang),Math.max(-.2,el),.4);
   skyU.sunCol.value.setRGB(1,.6+.3*dayF,.35+.5*dayF);sun.color.setRGB(1,.82+.16*dayF,.66+.3*dayF);hemi.color.setRGB(.62+.25*dayF,.72+.22*dayF,.95);
   waterNorm.offset.x=(now*.00002)%1;waterNorm.offset.y=(now*.000013)%1;
   scene.fog.near=Math.max(50,cam.dist*1.25);scene.fog.far=Math.max(130,cam.dist*3);{const cf=scene.fog.far+40,cn=clamp(cam.dist*.04,.05,4);if(Math.abs(camera.far-cf)>5||Math.abs(camera.near-cn)>cn*.2){camera.far=cf;camera.near=cn;camera.updateProjectionMatrix();}}{const hs=clamp(cam.dist*1.3,7,32);if(Math.abs(sun.shadow.camera.right-hs)>.5){Object.assign(sun.shadow.camera,{left:-hs,right:hs,top:hs,bottom:-hs});sun.shadow.camera.updateProjectionMatrix();}}

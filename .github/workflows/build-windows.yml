@@ -20,12 +20,13 @@ jobs:
       - name: Build MetroBuilder.exe
         working-directory: windows
         env: { CSC_IDENTITY_AUTO_DISCOVERY: 'false' }
-        run: npx electron-builder --win portable --x64 --publish never
+        run: npx electron-builder --win --x64 --publish never
       - name: Collect files
         shell: bash
         run: |
           mkdir -p out
           cp windows/dist/MetroBuilder.exe out/
+          cp windows/dist/MetroBuilder-Setup.exe out/
           cp MetroBuilder-PC.html out/
           ls -la out
       - uses: actions/upload-artifact@v4
@@ -36,8 +37,11 @@ jobs:
           tag_name: build-${{ github.run_number }}-win
           name: Metro Builder for Windows (build ${{ github.run_number }})
           body: |
-            Download **MetroBuilder.exe** and double-click it to play (no install needed). If Windows SmartScreen warns about an unknown app, choose **More info → Run anyway**.
+            **MetroBuilder-Setup.exe** installs the game with a desktop shortcut (recommended). **MetroBuilder.exe** runs without installing.
+            If Windows SmartScreen warns about an unknown app, choose **More info → Run anyway**.
+            Laptops with two graphics chips (e.g. Intel HD + NVIDIA): Windows Settings → System → Display → Graphics → add Metro Builder (installed version) → **High performance**. In the game, Settings shows which chip is in use.
             **MetroBuilder-PC.html** is the same game as a single file you can open in Chrome or Edge.
           files: |
+            out/MetroBuilder-Setup.exe
             out/MetroBuilder.exe
             out/MetroBuilder-PC.html
