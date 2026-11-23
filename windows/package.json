@@ -1,0 +1,21 @@
+{
+  "name": "metro-builder",
+  "productName": "Metro Builder",
+  "version": "1.0.0",
+  "description": "Metro Builder – 3D city builder",
+  "main": "main.js",
+  "author": "KuyaMao",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "electron": "33.2.1",
+    "electron-builder": "25.1.8"
+  },
+  "build": {
+    "appId": "com.kuyamao.metrobuilder",
+    "productName": "Metro Builder",
+    "files": ["main.js", "app/**"],
+    "win": { "target": [{ "target": "portable", "arch": ["x64"] }], "artifactName": "MetroBuilder.exe" },
+    "portable": { "requestExecutionLevel": "user" },
+    "compression": "maximum"
+  }
+}

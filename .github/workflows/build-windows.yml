@@ -1,0 +1,43 @@
+name: Build Windows app
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - name: Assemble game (offline, three.js inlined)
+        run: python tools/build_game.py
+      - name: Install Electron
+        working-directory: windows
+        run: npm install --no-audit --no-fund
+      - name: Build MetroBuilder.exe
+        working-directory: windows
+        env: { CSC_IDENTITY_AUTO_DISCOVERY: 'false' }
+        run: npx electron-builder --win portable --x64 --publish never
+      - name: Collect files
+        shell: bash
+        run: |
+          mkdir -p out
+          cp windows/dist/MetroBuilder.exe out/
+          cp MetroBuilder-PC.html out/
+          ls -la out
+      - uses: actions/upload-artifact@v4
+        with: { name: MetroBuilder, path: out/ }
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}-win
+          name: Metro Builder for Windows (build ${{ github.run_number }})
+          body: |
+            Download **MetroBuilder.exe** and double-click it to play (no install needed). If Windows SmartScreen warns about an unknown app, choose **More info → Run anyway**.
+            **MetroBuilder-PC.html** is the same game as a single file you can open in Chrome or Edge.
+          files: |
+            out/MetroBuilder.exe
+            out/MetroBuilder-PC.html
