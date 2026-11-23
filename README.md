@@ -11,7 +11,7 @@ Every update to this repository builds the game automatically (Actions tab, abou
 3. Or download **MetroBuilder-PC.html** and open it in Chrome or Edge.
 
 ## Project layout
-- `game/index.html` – the game (Three.js r128, vendored as `game/three.min.js`, MIT licence)
+- `game/index.html` – the game (Three.js r170 with post-processing add-ons, bundled as `game/three-r170.min.js`, MIT licence in `game/THREE-LICENSE.txt`)
 - `tools/build_game.py` – inlines three.js for the offline builds
 - `windows/` – Electron wrapper (`main.js`, `package.json`); `F11` toggles full screen
 - `.github/workflows/build-windows.yml` – builds `MetroBuilder.exe` and publishes a release

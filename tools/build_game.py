@@ -2,11 +2,11 @@
 import pathlib, sys
 root = pathlib.Path(__file__).resolve().parent.parent
 html = (root / 'game/index.html').read_text(encoding='utf-8')
-three = (root / 'game/three.min.js').read_text(encoding='utf-8')
-tag = '<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>'
+three = (root / 'game/three-r170.min.js').read_text(encoding='utf-8')
+tag = '<script src="three-r170.min.js"></script>'
 if html.count(tag) != 1:
     sys.exit('three.js script tag not found in game/index.html')
-out = html.replace(tag, '<script>' + three.replace('</script>', '<\\/script>') + '</script>')
+out = html.replace(tag, '<script>/* three.js r170 + post-processing add-ons, MIT licence (see THREE-LICENSE.txt) */\n' + three.replace('</script>', '<\\/script>') + '</script>')
 (root / 'windows/app').mkdir(parents=True, exist_ok=True)
 (root / 'windows/app/index.html').write_text(out, encoding='utf-8')
 (root / 'MetroBuilder-PC.html').write_text(out, encoding='utf-8')
