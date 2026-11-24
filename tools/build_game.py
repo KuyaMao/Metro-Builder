@@ -11,6 +11,10 @@ ptag = '<script src="texpack.js"></script>'
 if out.count(ptag) != 1:
     sys.exit('texpack.js script tag not found in game/index.html')
 out = out.replace(ptag, '<script>' + (root / 'game/texpack.js').read_text(encoding='utf-8') + '</script>')
+mtag = '<script src="modelpack.js"></script>'
+if out.count(mtag) != 1:
+    sys.exit('modelpack.js script tag not found in game/index.html')
+out = out.replace(mtag, '<script>' + (root / 'game/modelpack.js').read_text(encoding='utf-8') + '</script>')
 (root / 'windows/app').mkdir(parents=True, exist_ok=True)
 (root / 'windows/app/index.html').write_text(out, encoding='utf-8')
 (root / 'MetroBuilder-PC.html').write_text(out, encoding='utf-8')
