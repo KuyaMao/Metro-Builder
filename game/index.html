@@ -312,10 +312,10 @@ const MILESTONES = [
 /* road types: lane offsets (lo), carriage half width (cw), median half width, sidewalk width, speed factor */
 const RT={
   // each upgrade widens the carriageway (1 unit ~ 25 m): street 8.5 m, avenue 13.5 m, boulevard 17.5 m with a median, highway 23 m
-  s:{id:'road',name:'Street',lanes:1,lo:[.085],cw:.17,med:0,sw:.17,sp:1,cost:20},
-  a:{id:'avenue',name:'Avenue',lanes:2,lo:[.07,.205],cw:.27,med:0,sw:.15,sp:1.25,cost:45},
-  b:{id:'boulevard',name:'Boulevard',lanes:2,lo:[.11,.265],cw:.35,med:.06,sw:.12,sp:1.3,cost:70},
-  h:{id:'highway',name:'Highway',lanes:2,lo:[.135,.345],cw:.46,med:.03,sw:0,sp:1.9,cost:110}};
+  s:{id:'road',name:'Street',lanes:1,lo:[.085],cw:.17,med:0,sw:.17,sp:1,kmh:30,cost:20},
+  a:{id:'avenue',name:'Avenue',lanes:2,lo:[.07,.205],cw:.27,med:0,sw:.15,sp:1.45,kmh:50,cost:45},
+  b:{id:'boulevard',name:'Boulevard',lanes:2,lo:[.11,.265],cw:.35,med:.06,sw:.12,sp:1.7,kmh:60,cost:70},
+  h:{id:'highway',name:'Highway',lanes:2,lo:[.135,.345],cw:.46,med:.03,sw:0,sp:2.6,kmh:100,cost:110}};
 const ROADTOOL={road:'s',avenue:'a',boulevard:'b',highway:'h'};
 const isRoadTool=k=>k in ROADTOOL;
 const BIKEW=.06;
@@ -1006,7 +1006,7 @@ function powerPole(t,ns,X,Z,C,sw,out){const k=ns?t.z:t.x;if(k%2!==1)return;const
 // ns: the street runs north-south (along z). u = along the street, v = across it.
 // footbridge deck 6 m up (5.8 m clear for trucks), underpass 4 m down; stair flights ~10 m long, 1.75 m wide; deck 2.5 m wide
 const XO_H={over:.245,under:-.16},XO_RUN=.42,XO_SW=.07,XO_DW=.1;
-const xoLat=(C,sw)=>C+Math.max(.035,sw*.5);
+const xoLat=(C,sw)=>C+Math.max(.035,sw-XO_SW/2-.01);
 // a pair of bus stops: a shelter with bench and sign on each sidewalk, yellow loading box on the kerb lane
 function busStopParts(t,ns,X,Z,y,C,sw,q,out){
   const P=(u,v)=>ns?[X+v,Z+u]:[X+u,Z+v],B=(du,h,dv,u,y0,v,c,k='bdet')=>{const[a,b]=P(u,v);out[k].push([RB(ns?dv:du,h,ns?du:dv,a,y0,b),c]);},ym=y+.0013,
@@ -1653,11 +1653,12 @@ function placeBuilding(t,b,instant){
   for(let dz=0;dz<LZ(b);dz++)for(let dx=0;dx<LX(b);dx++){const n=T(t.x+dx,t.z+dz);if(n!==t){n.ref=key(t);n.tree=false;n.zone=null;drawTile(n);}}
   const k=key(t),o=objs[k]||(objs[k]={});
   if(o.b){scene.remove(o.b);if(b.zone)disposeGroup(o.b);o.b=null;}
+  if(instant)delete b.uc;else b.uc=true;if(FLEET[b.kind]&&b.fleet==null)b.fleet=instant?1:0;
   if(b.zone&&instant){o.baked=true;o.grow=1;}
   else{o.baked=false;o.b=buildMesh(t);scene.add(o.b);if(instant){o.grow=1;}else{o.grow=0;consStart(o,t);}}
   drawTile(t);dirty=true;parkT=0;
 }
-function rebuild(t){const o=objs[key(t)]||(objs[key(t)]={});if(o.b&&!(t.b&&t.b.zone))disposeSigns(o.b);if(t.b&&t.b.zone){if(o.b){scene.remove(o.b);disposeGroup(o.b);o.b=null;}o.baked=true;o.grow=1;markDirty(t);dirty=true;return;}if(o.b){scene.remove(o.b);}o.b=buildMesh(t);scene.add(o.b);dirty=true;}
+function rebuild(t){const o=objs[key(t)]||(objs[key(t)]={});if(o.b&&!(t.b&&t.b.zone))disposeSigns(o.b);if(t.b&&t.b.zone){if(o.b){scene.remove(o.b);disposeGroup(o.b);o.b=null;}if(o.site)consEnd(o);delete t.b.uc;o.baked=true;o.grow=1;markDirty(t);dirty=true;return;}if(o.b){scene.remove(o.b);}o.b=buildMesh(t);scene.add(o.b);dirty=true;}
 function removeBuilding(t){
   if(t.ref!=null)t=G.tiles[t.ref];
   if(!t.b)return;if(t.b.kind==='train'||t.b.kind==='metro'){const b0=t.b;setTimeout(()=>{for(const n of stationTilesAround({x:t.x,z:t.z,b:b0}))if(n.rail||n.metro)markDirty(n);},0);}
@@ -1671,7 +1672,7 @@ let dirty=true, stats={pop:0,cj:0,ij:0,hap:0,inc:0,exp:0,dR:0,dC:0,dI:0,riders:0
 const COV0=Object.freeze({});const roots=()=>G.tiles.filter(t=>t.b);
 function computeCoverage(){
   cov=new Array(N*N).fill(COV0);
-  for(const t of roots()){const b=t.b;if(!b.kind)continue;const s=SERV[b.kind];
+  for(const t of roots()){const b=t.b;if(!b.kind||b.uc||!fleetOK(b))continue;const s=SERV[b.kind];
     if(s.cat==='tr'){b.conn=termConnected(t);if(!terminalStats(b).ok||!b.conn)continue;}
     const um=uMod(b),c=(b.size-1)/2, cx=t.x+c, cz=t.z+c, lv=s.cat==='tr'?1:Math.min(3,b.lv||1), r=s.r*LV_R[lv-1]*(.75+.25*(b.fund??100)/100)*um.r;
     for(let z=Math.max(0,Math.floor(cz-r));z<=Math.min(N-1,cz+r);z++)for(let x=Math.max(0,Math.floor(cx-r));x<=Math.min(N-1,cx+r);x++){
@@ -1696,11 +1697,12 @@ function tick(){if(G&&G.mode==='career'&&!G.landTip&&stats.pop>=300&&ownedCount(
   let pop=0,cj=0,ij=0,hs=0,hn=0,up=0,riders=0,shopInc=0;
   const rs=roots();
   for(const t of rs){const b=t.b;
+    if(b.uc){b.riders=0;continue;}
     if(b.zone){b.hap=happiness(t);const c=cap(b);if(b.zone==='R')pop+=c;else if(b.zone==='C')cj+=c;else ij+=c;hs+=b.hap*c;hn+=c;}
     else{const s=SERV[b.kind];up+=svcUpkeep(b);if(s.cat==='tr'){const ts=terminalStats(b);b.ts=ts;shopInc+=ts.ok?ts.shops*6:0;}}
   }
   // ridership
-  for(const t of rs){const b=t.b;if(!b.ts||!b.ts.ok||b.conn===false){if(b.ts)b.riders=0;continue;}const s=SERV[b.kind];let near=0;for(const u of rs)if(u.b.zone==='R'&&Math.hypot(u.x-t.x,u.z-t.z)<s.r)near+=cap(u.b);b.riders=Math.min(b.ts.cap,Math.round(near*0.35+(b.kind==='airport'?pop*0.05:0)));riders+=b.riders;}
+  for(const t of rs){const b=t.b;if(b.uc||!fleetOK(b)||!b.ts||!b.ts.ok||b.conn===false){if(b.ts||b.uc)b.riders=0;continue;}const s=SERV[b.kind];let near=0;for(const u of rs)if(u.b.zone==='R'&&Math.hypot(u.x-t.x,u.z-t.z)<s.r)near+=cap(u.b);b.riders=Math.min(b.ts.cap,Math.round(near*0.35+(b.kind==='airport'?pop*0.05:0)));riders+=b.riders;}
   const workers=pop*0.6, jobs=cj+ij, taxF=(G.tax-10)*2.5;
   stats.dR=clamp(45+(jobs-workers)/4-taxF+(hn?(hs/hn-50)/2:0),-100,100);
   stats.dC=clamp((pop*0.28-cj)/2+riders/40-taxF+5,-100,100);
@@ -2190,13 +2192,13 @@ function updateShips(dt){if(!G)return;if(!shipsInit)initShips();
   for(const o of ships){
     if(o.mode==='lane'){o.x+=o.dir*o.sp*dt;if(o.x>_shipRange)o.x=-_shipRange;if(o.x<-_shipRange)o.x=_shipRange;o.y=-.005+Math.sin(performance.now()/900+o.x)*.004;}
     else{// a cargo ship calling at one of the city's ports
-      if(o.mode==='idle'){o.m.visible=false;o.t-=dt;const ports=PK[o.pk];if(o.t<=0&&ports.length){const used=new Set(ships.filter(q=>q!==o&&q.port).map(q=>q.port));const pt=ports.find(p=>!used.has(p));if(pt){
+      if(o.mode==='idle'){o.m.visible=false;o.t-=dt;const ports=PK[o.pk];if(o.t<=0&&ports.length){const used=new Set(ships.filter(q=>q!==o&&q.port).map(q=>q.port));const pt=ports.find(p=>!used.has(p)&&(o.pk!=='ferry'||(p.b.fleet||0)>ships.filter(q=>q.pk==='ferry'&&q.home===p).length));if(pt&&o.pk==='ferry')o.home=pt;if(pt){
           const r=pt.b.rot||0,fx=Math.sin(r),fz=Math.cos(r),ax=Math.cos(r),az=-Math.sin(r),S=SERV[o.pk].size,cx=wx(pt.x)+(S-1)/2,cz=wx(pt.z)+(S-1)/2,qd=S/2+(o.type==='cargo'?.3+.06:.18+.03);
           o.port=pt;const sh=o.type==='ferry'?-.15:0;o.D=[cx+fx*qd+ax*sh,cz+fz*qd+az*sh];o.O=[o.D[0]+fx*4+ax*1.5,o.D[1]+fz*4+az*1.5];o.F=[o.O[0]+fx*22+ax*14,o.O[1]+fz*22+az*14];o.qyaw=Math.atan2(-ax,-az);
           o.x=o.F[0];o.z=o.F[1];o.path=[o.O,o.D];o.mode='in';o.m.visible=true;}}}
       else if(o.port&&(!o.port.b||o.port.b.kind!==o.pk)){o.mode='idle';o.port=null;o.t=20;continue;}
       else if(o.mode==='in'||o.mode==='out'){const tg=o.path[0],dx=tg[0]-o.x,dz=tg[1]-o.z,d=Math.hypot(dx,dz),sp=o.sp*(d<2?.35:1);
-        if(d<.02){o.path.shift();if(!o.path.length){if(o.mode==='in'){o.mode='dock';o.t=o.pk==='ferry'?30:50;}else{o.mode='idle';o.port=null;o.t=o.pk==='ferry'?12:30;}}}
+        if(d<.02){o.path.shift();if(!o.path.length){if(o.mode==='in'){o.mode='dock';o.t=o.pk==='ferry'?30:50;}else{o.mode='idle';o.port=null;o.home=null;o.t=o.pk==='ferry'?12:30;}}}
         else{const st=Math.min(d,sp*dt);o.x+=dx/d*st;o.z+=dz/d*st;let want=o.path.length===1&&o.mode==='in'&&d<1.2?o.qyaw:Math.atan2(dx,dz),dy=want-o.yaw;dy=Math.atan2(Math.sin(dy),Math.cos(dy));o.yaw+=dy*Math.min(1,dt*.8);}}
       else if(o.mode==='dock'){o.t-=dt;let dy=o.qyaw-o.yaw;dy=Math.atan2(Math.sin(dy),Math.cos(dy));o.yaw+=dy*Math.min(1,dt*.8);if(o.t<=0){o.mode='out';o.path=[o.O,o.F];}}
       o.y=-.005;o.w.visible=o.mode!=='dock';}
@@ -2207,19 +2209,24 @@ function busBoard(c){for(const o of peds){if(o.bsW!==c.a||!o.pos||o.xg||!(o.paus
 /* ---------- bus terminal: buses drive in through the entrance, park nose-in at a bay, reverse out and leave by the exit ---------- */
 function busBays(b){return clamp(terminalStats(b).plats,1,4);}
 const tbuses=[];let BUSV=null;const _tbV=new THREE.Vector3(),_tbT=new THREE.Vector3();
-function termFrame(t){const S=SERV.bus.size,r=t.b.rot||0,cx=wx(t.x)+(S-1)/2,cz=wx(t.z)+(S-1)/2,ca=Math.cos(r),sa=Math.sin(r);
-  return{t,r,W:(x,z)=>new THREE.Vector3(cx+x*ca+z*sa,0,cz-x*sa+z*ca),tile:(x,z)=>{const p=[cx+x*ca+z*sa,cz-x*sa+z*ca];return T(Math.round(p[0]+N/2-.5),Math.round(p[1]+N/2-.5));}};}
+function termFrame(t){const S=t.b.size||SERV.bus.size,r=t.b.rot||0,cx=wx(t.x)+(S-1)/2,cz=wx(t.z)+(S-1)/2,ca=Math.cos(r),sa=Math.sin(r);
+  return{t,r,W:(x,z)=>new THREE.Vector3(cx+x*ca+z*sa,0,cz-x*sa+z*ca),Lz:(X,Z)=>(X-cx)*sa+(Z-cz)*ca,tile:(x,z)=>{const p=[cx+x*ca+z*sa,cz-x*sa+z*ca];return T(Math.round(p[0]+N/2-.5),Math.round(p[1]+N/2-.5));}};}
 function termRoad(f){// how far the street in front runs to each side (in tiles), and the kerb-lane offset
-  const ok=n=>n&&n.road&&!n.water;if(!ok(f.tile(.5,1.5))||!ok(f.tile(-.5,1.5)))return null;let rgt=1.5,lft=-1.5;
-  if(ok(f.tile(1.5,1.5)))rgt=2.5;if(rgt>2&&ok(f.tile(2.5,1.5)))rgt=3.4;if(ok(f.tile(-1.5,1.5)))lft=-2.5;if(lft<-2&&ok(f.tile(-2.5,1.5)))lft=-3.4;
-  return{rgt,lft,zr:1.5-laneOff(f.tile(.5,1.5),0)};}
+  const S=f.t.b.size||2,zf=S/2+.5,ok=n=>n&&n.road&&!n.water;if(!ok(f.tile(.9,zf))||!ok(f.tile(-.9,zf)))return null;let rgt=1.5,lft=-1.5;
+  if(ok(f.tile(1.9,zf)))rgt=2.5;if(rgt>2&&ok(f.tile(2.9,zf)))rgt=3.4;if(ok(f.tile(-1.9,zf)))lft=-2.5;if(lft<-2&&ok(f.tile(-2.9,zf)))lft=-3.4;
+  return{rgt,lft,zr:zf-laneOff(f.tile(.9,zf),0)};}
 function tbCurve(f,pts){return new THREE.CatmullRomCurve3(pts.map(([x,z])=>f.W(x,z)),false,'centripetal',.5);}
+// terminal buses give way to people on the sidewalk and wait for a gap in traffic before pulling out
+function tbHold(o,dt){if(o.px==null||o.mode==='dwell')return false;const sg=o.mode==='rev'?-1:1,fx=Math.sin(o.yaw)*sg,fz=Math.cos(o.yaw)*sg,ax=o.px+fx*.34,az=o.pz+fz*.34;let h=false;
+  if(o.lz>.6)for(const q of peds){if(!q.shown||!q.pos||q.kind==='visit')continue;const dx=q.pos.x-ax,dz=q.pos.z-az;if(dx*dx+dz*dz<.016){h=true;break;}}
+  if(!h&&o.mode==='out2'&&o.lz<1.12&&o.merge){const M=o.merge;for(const c of cars){if(!c.a||c.shown===false||!c.pos)continue;const dx=M[0]-c.pos.x,dz=M[1]-c.pos.z,d=Math.hypot(dx,dz);const fx2=Math.sin(c.yaw),fz2=Math.cos(c.yaw);if(d<1.1&&d>.05&&dx*fx2+dz*fz2>0&&Math.abs(dx*fz2-dz*fx2)<.16){h=true;break;}}}
+  if(h){o.hold=(o.hold||0)+dt;if(o.hold>10){o.hold=0;return false;}}else o.hold=0;o.brake=h;return h;}
 function updateTermBuses(dt){if(!BUSV)BUSV=VTYPES.find(v=>v.id==='bus');
   const terms=[];for(const t of G.tiles)if(t.b&&t.b.kind==='bus'&&t.ref==null&&!(objs[key(t)]&&objs[key(t)].grow<1))terms.push(t);
   for(const t of terms){if(!t._tb)t._tb={next:rnd(4,9),bays:[]};const st=t._tb;st.next-=dt;
     const n=busBays(t.b);for(let i=0;i<n;i++)if(st.bays[i]===undefined)st.bays[i]=null;
     const moving=tbuses.some(o=>o.t===t&&(o.mode!=='dwell'||o.w<=0));
-    if(st.next<=0&&!moving&&tbuses.length<TB_MAX){const fr=termFrame(t),rd=termRoad(fr);const free=[];for(let i=0;i<n;i++)if(!st.bays[i])free.push(i);
+    if(st.next<=0&&!moving&&tbuses.length<TB_MAX&&tbuses.filter(o=>o.t===t).length<(t.b.fleet||0)){const fr=termFrame(t),rd=termRoad(fr);const free=[];for(let i=0;i<n;i++)if(!st.bays[i])free.push(i);
       if(rd&&free.length){const i=free[Math.floor(Math.random()*free.length)],bx=(i-(n-1)/2)*.3,zr=rd.zr;
         const o={t,i,bx,fr,rd,mode:'in',d:0,col:new THREE.Color(BUSV.cols[Math.floor(Math.random()*BUSV.cols.length)]),brake:false,v:BUSV,
           cv:tbCurve(fr,[[rd.rgt,zr],[(rd.rgt+1.1)/2,zr],[1.12,zr],[.92,1.12],[.88,.9],[.7,.8],[bx+.2,.79],[bx+.03,.68],[bx,.5],[bx,.36]])};
@@ -2229,14 +2236,15 @@ function updateTermBuses(dt){if(!BUSV)BUSV=VTYPES.find(v=>v.id==='bus');
     let rev=false;
     if(o.mode==='dwell'){o.w-=dt;if(o.w<=0&&!tbuses.some(q=>q!==o&&q.t===t&&q.mode!=='dwell')){const{bx}=o,zr=o.rd.zr;
         o.mode='rev';o.d=0;o.cv=tbCurve(o.fr,[[bx,.36],[bx,.56],[bx+.06,.74],[bx+.26,.8]]);o.len=o.cv.getLength();}}
+    else if(tbHold(o,dt)){}
     else{const sp=o.mode==='rev'?.12:(o.d>o.len-.35||o.d<.3&&o.mode==='out2'?.22:.42)*(o.mode==='in'&&o.d<o.len-1.2?1.6:1);o.d=Math.min(o.len,o.d+sp*dt);
       if(o.d>=o.len){if(o.mode==='in'){o.mode='dwell';o.w=rnd(18,40);}
-        else if(o.mode==='rev'){o.mode='out2';o.d=0;const{bx}=o,zr=o.rd.zr;o.cv=tbCurve(o.fr,[[bx+.26,.8],[bx,.8],[-.7,.8],[-.88,.9],[-.92,1.12],[-1.12,zr],[(o.rd.lft-1.1)/2,zr],[o.rd.lft,zr]]);o.len=o.cv.getLength();t._tb.bays[o.i]=null;}
+        else if(o.mode==='rev'){o.mode='out2';o.d=0;const{bx}=o,zr=o.rd.zr;{const M=o.fr.W(-1.15,zr);o.merge=[M.x,M.z];}o.cv=tbCurve(o.fr,[[bx+.26,.8],[bx,.8],[-.7,.8],[-.88,.9],[-.92,1.12],[-1.12,zr],[(o.rd.lft-1.1)/2,zr],[o.rd.lft,zr]]);o.len=o.cv.getLength();t._tb.bays[o.i]=null;}
         else{tbuses.splice(k,1);continue;}}}
-    rev=o.mode==='rev';const u=o.mode==='dwell'?1:o.d/o.len;o.cv.getPointAt(Math.min(1,u),_tbV);o.cv.getTangentAt(Math.min(.999,u),_tbT);
+    rev=o.mode==='rev';const u=o.mode==='dwell'?1:o.d/o.len;o.cv.getPointAt(Math.min(1,u),_tbV);o.cv.getTangentAt(Math.min(.999,u),_tbT);o.px=_tbV.x;o.pz=_tbV.z;o.lz=o.fr.Lz(_tbV.x,_tbV.z);
     const inside=Math.abs(_tbV.x-(wx(t.x)+.5))<1&&Math.abs(_tbV.z-(wx(t.z)+.5))<1;
     if(o.mode!=='dwell'){o.yaw=Math.atan2(_tbT.x,_tbT.z)+(rev?Math.PI:0);}
-    o.brake=o.mode==='dwell'||rev||o.d>o.len-.3;
+    o.brake=o.mode==='dwell'||rev||o.d>o.len-.3||o.hold>0;
     dummy.position.set(_tbV.x,inside?.006:.012,_tbV.z);dummy.rotation.set(0,o.yaw,0);dummy.scale.set(1,1,1);
     if(BUSV.cnt<BUSV.n+TB_MAX)setCar(o,0,false);}}
 function updateCars(dt){
@@ -2265,6 +2273,7 @@ function updateCars(dt){
       for(const o of onTile.get(key(c.a))||[])if(o!==c&&o.b===c.b&&o.lane===ol&&Math.abs(o.p-c.p)<.5){free=false;break;}
       if(free&&c.b!==c.a)for(const o of onTile.get(key(c.b))||[])if(o.prev===c.a&&o.lane===ol&&o.p<.35){free=false;break;}
       if(free){c.lane=ol;c.lct=3;lead=9;for(const o of onTile.get(key(c.a))||[]){if(o!==c&&o.b===c.b&&o.p>c.p&&o.lane===c.lane){const d=o.p-c.p;if(d<lead){lead=d;leadL=o.v.L;}}}}}
+    if(tbuses.length&&c.pos)for(const q of tbuses){if(!(q.lz>.72)||q.px==null)continue;const dx=q.px-c.pos.x,dz=q.pz-c.pos.z;if(Math.abs(dx)>1.3||Math.abs(dz)>1.3)continue;const fx=Math.sin(c.yaw),fz=Math.cos(c.yaw),ah=dx*fx+dz*fz,la=Math.abs(dx*fz-dz*fx);if(ah>0&&ah<lead&&la<.13){lead=ah;leadL=BUSV?BUSV.L:.48;}}
     const gmin=(c.v.L+leadL)/2+.045,safe=gmin+.12+c.cur*.42;
     let target=c.sp*rtOf(c.a).sp*clamp((lead-gmin)/(safe-gmin),0,1);
     // traffic signal: ease to a stop at the line
@@ -2499,7 +2508,7 @@ function xTrigger(o,prevP){const t=o.a,ns=roadMask(t)===5,X=wx(t.x),Z=wx(t.z);
 let doorList=[],doorByTile=new Map(),doorT=0;
 const NODOOR=new Set(['solar','wind','power','water','watertreat','port','shipyard']);
 function refreshDoors(){doorList=[];doorByTile=new Map();if(!G)return;
-  for(const t of G.tiles){const b=t.b;if(!b||PARKS[b.kind]||NODOOR.has(b.kind))continue;
+  for(const t of G.tiles){const b=t.b;if(!b||b.uc||PARKS[b.kind]||NODOOR.has(b.kind))continue;
     const r=b.rot||0,fx=Math.round(Math.sin(r)),fz=Math.round(Math.cos(r)),lx=b.zone?LX(b):(b.size||1),lz=b.zone?LZ(b):(b.size||1),cx=wx(t.x)+(lx-1)/2,cz=wx(t.z)+(lz-1)/2,half=fx?lx/2:lz/2;
     const dd=Math.min(half-.04,b._doorZ!=null?b._doorZ:half*.62),Dx=cx+fx*dd,Dz=cz+fz*dd,px=cx+fx*(half+.5)+.001,pz=cz+fz*(half+.5)+.001,Rt=T(Math.round(px+N/2-.5),Math.round(pz+N/2-.5));
     if(!Rt||!pedOK(Rt)||Rt.cv||Rt.water)continue;const m=roadMask(Rt);if(m!==5&&m!==10)continue;const ns=m===5;if(ns!==(fx!==0))continue;
@@ -2511,6 +2520,8 @@ function pickDest(from,R0){if(doorList.length<2)return null;const fc=from?doorCa
   for(let k=0;k<14;k++){const d=doorList[Math.floor(Math.random()*doorList.length)];if(!d.t.b||(from&&d.t===from.t))continue;const dist=Math.abs(d.R.x-R0.x)+Math.abs(d.R.z-R0.z);if(dist>26)continue;
     const w=(W[doorCat(d)]||.3)*(dist<2?.4:1)*Math.random();if(w>bw){bw=w;best=d;}}return best;}
 // the next street tile towards the destination (closest by street distance on a straight grid, a little randomness)
+// keep walkers clear of stair flights (outer edge of the sidewalk) and bus shelters
+function pedLat(o,g,v){const t=o.a;if(!t||o.bsW===t)return v;if(t.xo)v=Math.min(v,Math.max(.012,g.sw-XO_SW-.022));if(t.bs)v=Math.min(v,Math.max(.012,Math.min(g.sw*.55,g.sw-.035)-.045));return v;}
 function dstStep(o,nb){const R=o.dst.R;let best=nb[0],bv=1e9;for(const n of nb){const v=Math.abs(n.x-R.x)+Math.abs(n.z-R.z)+Math.random()*.6;if(v<bv){bv=v;best=n;}}return best;}
 function doorLat(R,side){const g=roadGeo(R);return side*(g.C+Math.max(.03,g.sw*(.62+.17*side)));}
 function doorSpawn(o,seen){if(!doorList.length)return false;let d=null;for(let k=0;k<6;k++){const c=doorList[Math.floor(Math.random()*doorList.length)];d=c;if(seen(c.D[0],.05,c.D[1]))break;}
@@ -2538,7 +2549,7 @@ function updatePeople(dt,rdt){
   const roads=roadsCache,want=pedRoads.length?Math.min(PEDMAX,24+Math.floor(stats.pop/10)):0;
   const cp=camera.position,farHide=Math.max(48,cam.dist*1.6);let vIdx=0;_PV.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse);_FR.setFromProjectionMatrix(_PV);
   const seen=(x,y,z)=>Math.hypot(x-cp.x,z-cp.z)<farHide&&_FR.containsPoint(_PV3.set(x,y+.05,z));
-  parkT-=rdt;if(parkT<=0&&G){parkT=2;parkList=G.tiles.filter(t=>t.b&&PARKS[t.b.kind]);}
+  parkT-=rdt;if(parkT<=0&&G){parkT=2;parkList=G.tiles.filter(t=>t.b&&!t.b.uc&&PARKS[t.b.kind]);}
   const near=new Map();for(const o of peds)if(o.shown&&o.a&&o.kind!=='visit'){const kk=key(o.a)+(o.kind==='bike'||o.kind==='scoot'?'r':'w');(near.get(kk)||near.set(kk,[]).get(kk)).push(o);}
   for(const o of peds){
     let px,pz,yBase,pose=o.kind;
@@ -2581,7 +2592,7 @@ function updatePeople(dt,rdt){
     if(o.kind==='walk'&&o.dst&&!o.xg&&o.a&&o.p<1&&o.pos&&doorByTile.size&&!o.a.cv)doorEnter(o,p0);o.phase+=step/(STRIDE[o.kind]*o.L.scale)*Math.PI*2;
     if(o.p>=1){o.p-=1;o.prev=o.a;o.a=o.b;let nb=roadNeighbors(o.a).filter(n=>n!==o.prev&&okT(n));if(!rider&&nb.length>1&&!o.a.xw&&!o.a.cv&&roadNeighbors(o.a).length>=3&&o.offC!=null){const ok=nb.filter(n=>!xCrosses(o,n));if(ok.length)nb=ok;}if(!nb.length)nb=[o.prev];if(!o.dst&&o.kind==='walk'&&Math.random()<.06){o.dst=pickDest(null,o.a);o.dstT=120;}o.b=o.dst&&nb.length>1&&Math.random()<.8?dstStep(o,nb):nb[Math.floor(Math.random()*nb.length)];if(o.kind==='walk'&&Math.random()<.08)o.pause=rnd(2,6);o.bsW=null;}
     if(o.kind==='walk'&&!o.dst&&!o.bsW&&o.a&&o.a.bs&&p0<.5&&o.p>=.5&&!o.xg&&Math.random()<.45){o.bsW=o.a;o.pause=rnd(18,45);}
-    {const g=roadGeo(o.a),side=o.off<0?-1:1,rider=o.kind==='bike'||o.kind==='scoot',lat=rider?(g.bk?g.r.cw+g.bk*.5:g.r.cw-.075)+o.lj*.008:side*(g.C+Math.max(.03,g.sw*(.62+.17*side+o.lj*(o.kind==='jog'?.17:.06))));if(o.offC==null)o.offC=lat;o.offC+=(lat-o.offC)*Math.min(1,dt*3);}
+    {const g=roadGeo(o.a),side=o.off<0?-1:1,rider=o.kind==='bike'||o.kind==='scoot',lat=rider?(g.bk?g.r.cw+g.bk*.5:g.r.cw-.075)+o.lj*.008:side*(g.C+pedLat(o,g,Math.max(.03,g.sw*(.62+.17*side+o.lj*(o.kind==='jog'?.17:.06)))));if(o.offC==null)o.offC=lat;o.offC+=(lat-o.offC)*Math.min(1,dt*3);}
     const pp=rider?pathAt(o.a,o.prev,o.b,o.p,o.offC):walkPath(o);px=pp.x;pz=pp.z;const tx=pp.tx,tz=pp.tz;
     if(o.snap){o.yaw=Math.atan2(tx,tz);o.snap=false;}let dy=Math.atan2(tx,tz)-o.yaw;dy=Math.atan2(Math.sin(dy),Math.cos(dy));o.yaw+=dy*Math.min(1,dt*6);
     yBase=surfY(o.a,px,pz)+(o.kind==='scoot'?.0135:0)+(o.kind==='walk'||o.kind==='jog'?.006:0);
@@ -2698,6 +2709,9 @@ function runwayLine(t){for(const n of stationTilesAround(t)){if(n.runway!==true)
     const len=Math.abs(b.x-a.x)+Math.abs(b.z-a.z)+1;if(len>=5){const da=Math.hypot(a.x-t.x,a.z-t.z),db=Math.hypot(b.x-t.x,b.z-t.z);return da<=db?{a,b,len}:{a:b,b:a,len};}}}return null;}
 function termConnected(t){const k=t.b.kind,around=stationTilesAround(t);
   if(k==='bus')return around.some(n=>n.road);if(k==='metro')return around.some(n=>n.metro);if(k==='train')return around.some(n=>n.rail);if(k==='airport')return !!runwayLine(t);return true;}
+// transit vehicles must be bought before a terminal or station runs
+const FLEET={bus:{v:'bus',vs:'buses',cost:3000,max:4},train:{v:'train',vs:'trains',cost:15000,max:4},metro:{v:'metro train',vs:'metro trains',cost:18000,max:4},airport:{v:'plane',vs:'planes',cost:30000,max:3},ferry:{v:'ferry',vs:'ferries',cost:9000,max:3}};
+function fleetOK(b){return !FLEET[b.kind]||(b.fleet||0)>0;}
 const CONN_HINT={bus:'Needs a road next to it.',metro:'Build a Metro line that touches the station.',train:'Build Rail track that touches the station.',airport:'Build a straight Runway (5+ tiles) that touches the airport.'};
 
 /* ---------- trains and metro ---------- */
@@ -2713,7 +2727,7 @@ const tMesh={};for(const k of['rail','metro']){const n=TMAX[k]*TCARS[k];
 const TCOL={rail:[0xe8e4dc,0x2e5d8a,0xc62828,0xf2b705],metro:[0xd8dde2,0xb0b8c0]};
 const trains=[],spawnT={rail:0,metro:0};let netT=0,netCache={rail:[],metro:[]},stationAdj={rail:new Set(),metro:new Set()},crossBusy=new Set(),stCount={rail:0,metro:0};
 function refreshNets(){netCache.rail=G.tiles.filter(t=>t.rail);netCache.metro=G.tiles.filter(t=>t.metro);stationAdj={rail:new Set(),metro:new Set()};stCount={rail:0,metro:0};
-  for(const t of G.tiles){if(!t.b)continue;const k=t.b.kind==='train'?'rail':t.b.kind==='metro'?'metro':null;if(!k)continue;let any=false;for(const n of stationTilesAround(t))if(n[k]){stationAdj[k].add(key(n));any=true;}if(any)stCount[k]++;}}
+  for(const t of G.tiles){if(!t.b)continue;const k=t.b.kind==='train'?'rail':t.b.kind==='metro'?'metro':null;if(!k)continue;let any=false;for(const n of stationTilesAround(t))if(n[k]){stationAdj[k].add(key(n));any=true;}if(any&&!t.b.uc)stCount[k]+=t.b.fleet||0;}}
 function trackPos(o,k){const cx=wx(o.a.x),cz=wx(o.a.z),e=o.prev===o.a?[cx,cz]:[(wx(o.prev.x)+cx)/2,(wx(o.prev.z)+cz)/2],x=o.b===o.a?[cx,cz]:[(wx(o.b.x)+cx)/2,(wx(o.b.z)+cz)/2];
   const p=qbez(e,[cx,cz],x,o.p),y=k==='metro'?.48:(o.a.water&&!o.a.road?.142:.012)+(k==='rail'?.024:0);return{x:p[0],z:p[1],y};}
 function spawnTrain(k){const cand=netCache[k].filter(t=>stationAdj[k].has(key(t)));if(!cand.length)return null;const a=cand[Math.floor(Math.random()*cand.length)],nb=netNb(a,k);
@@ -2764,36 +2778,36 @@ const planeMesh=new THREE.InstancedMesh(planeG,new THREE.MeshStandardMaterial({v
 const flights=new Map(),PLANE_Y=.12;
 // gates (local x) for real-size narrow-body jets (37 m long, 36 m span): two per airport
 function airGates(b){const n=clamp(terminalStats(b).plats,1,2);return n===1?[0]:[-1,1];}
-function airFrame(t){const S=4,r=t.b.rot||0,cx=wx(t.x)+(S-1)/2,cz=wx(t.z)+(S-1)/2,ca=Math.cos(r),sa=Math.sin(r);
-  return{W:(x,z)=>[cx+x*ca+z*sa,cz-x*sa+z*ca],L:(X,Z)=>[(X-cx)*ca-(Z-cz)*sa,(X-cx)*sa+(Z-cz)*ca],tile:(x,z)=>{const p=[cx+x*ca+z*sa,cz-x*sa+z*ca];return T(Math.round(p[0]+N/2-.5),Math.round(p[1]+N/2-.5));}};}
+function airFrame(t){const S=t.b.size||4,LN=S/2+.5,r=t.b.rot||0,cx=wx(t.x)+(S-1)/2,cz=wx(t.z)+(S-1)/2,ca=Math.cos(r),sa=Math.sin(r);
+  return{LN,W:(x,z)=>[cx+x*ca+z*sa,cz-x*sa+z*ca],L:(X,Z)=>[(X-cx)*ca-(Z-cz)*sa,(X-cx)*sa+(Z-cz)*ca],tile:(x,z)=>{const p=[cx+x*ca+z*sa,cz-x*sa+z*ca];return T(Math.round(p[0]+N/2-.5),Math.round(p[1]+N/2-.5));}};}
 // taxi route from the runway to the taxi lane in front of a gate (tile path over taxiway tiles)
-function taxiRoute(t,line,gx){const f=airFrame(t),lead=[f.tile(gx*1.5,2.5),f.tile(gx===0?.5:gx*.5,2.5),f.tile(gx===0?-.5:gx*.5,2.5)].filter(n=>n&&n.runway==='taxi');if(!lead.length)return null;
+function taxiRoute(t,line,gx){const f=airFrame(t),lead=[f.tile(gx*1.5,f.LN),f.tile(gx===0?.5:gx*.5,f.LN),f.tile(gx===0?-.5:gx*.5,f.LN)].filter(n=>n&&n.runway==='taxi');if(!lead.length)return null;
   const onLine=n=>{if(n.runway!==true)return false;const dx=Math.sign(line.b.x-line.a.x),dz=Math.sign(line.b.z-line.a.z);return dx?n.z===line.a.z&&(n.x-line.a.x)*dx>=0&&(n.x-line.b.x)*dx<=0:n.x===line.a.x&&(n.z-line.a.z)*dz>=0&&(n.z-line.b.z)*dz<=0;};
   const prev=new Map(),q=[];for(const l of lead){prev.set(l,null);q.push(l);}let hit=null;
   while(q.length&&!hit){const c=q.shift();for(const[dx,dz]of DIRS4){const n=T(c.x+dx,c.z+dz);if(!n||prev.has(n))continue;if(onLine(n)){prev.set(n,c);hit=n;break;}if(n.runway==='taxi'){prev.set(n,c);q.push(n);}}}
   if(!hit)return null;const tiles=[];for(let c=hit;c;c=prev.get(c))tiles.push(c);// runway tile first, lead tile last
   return{tiles,s:Math.abs(hit.x-line.a.x)+Math.abs(hit.z-line.a.z),f};}
-const onLane=p=>Math.abs(p[1]-2.5)<.2;
+
 // taxi in: route points (runway first) -> along the lane in front of the airport -> turn nose-in to the gate
-function taxiInPts(f,g,W){const Lc=W.map(p=>f.L(p[0],p[1]));let k=Lc.findIndex(onLane);if(k<0)k=Lc.length-1;
+function taxiInPts(f,g,W){const N2=f.LN-2.5,onLane=p=>Math.abs(p[1]-f.LN)<.2;const Lc=W.map(p=>f.L(p[0],p[1]));let k=Lc.findIndex(onLane);if(k<0)k=Lc.length-1;
   const pre=k>0?Lc[k-1]:null,along=pre&&onLane(pre);let dir=along?Math.sign(Lc[k][0]-pre[0])||1:Math.sign(g-Lc[k][0])||1;
   const out=W.slice(0,k+1);for(let i=k+1;i<Lc.length;i++){if(!onLane(Lc[i])||(g-Lc[i][0])*dir<=.5)break;out.push(W[i]);}
-  out.push(f.W(g-dir*.42,2.5),f.W(g-dir*.08,2.22),f.W(g,1.65),f.W(g,.9));return out;}
+  out.push(f.W(g-dir*.42,f.LN),f.W(g-dir*.08,2.22+N2),f.W(g,1.65+N2),f.W(g,.9));return out;}
 // push-back and taxi out: choose the push direction so the nose ends up pointing along the way out
-function taxiOutPlan(f,g,W){const Lc=W.map(p=>f.L(p[0],p[1]));let dir=0;
+function taxiOutPlan(f,g,W){const N2=f.LN-2.5,onLane=p=>Math.abs(p[1]-f.LN)<.2;const Lc=W.map(p=>f.L(p[0],p[1]));let dir=0;
   for(let i=0;i<Lc.length;i++){if(!onLane(Lc[i])){const q=i>0?Lc[i-1]:Lc[i];dir=Math.sign(q[0]-g)||(g>0?-1:1);break;}if(Math.abs(Lc[i][0]-g)>.3){dir=Math.sign(Lc[i][0]-g);break;}}
-  if(!dir)dir=g>0?-1:1;const pb=f.W(g-dir*.5,2.48),out=[pb];let started=false;
+  if(!dir)dir=g>0?-1:1;const pb=f.W(g-dir*.5,f.LN-.02),out=[pb];let started=false;
   for(let i=0;i<Lc.length;i++){if(!started&&onLane(Lc[i])&&(Lc[i][0]-g)*dir<.25)continue;started=true;out.push(W[i]);}
-  return{push:[f.W(g,.9),f.W(g,1.75),f.W(g-dir*.12,2.3),pb],out};}
+  return{push:[f.W(g,.9),f.W(g,1.75+N2),f.W(g-dir*.12,2.3+N2),pb],out};}
 function curveOf(pts){pts=pts.filter((p,i)=>!i||Math.hypot(p[0]-pts[i-1][0],p[1]-pts[i-1][1])>.08);const c=new THREE.CatmullRomCurve3(pts.map(p=>new THREE.Vector3(p[0],0,p[1])),false,'centripetal',.5);return{c,len:c.getLength()};}
 const _pv=new THREE.Vector3(),_pt=new THREE.Vector3();
 function updatePlanes(dt){let n=0;const put=(x,y,z,pitch,yaw)=>{if(n>=24)return;_tm.position.set(x,y,z);_tm.rotation.set(pitch,yaw,0,'YXZ');_tm.updateMatrix();planeMesh.setMatrixAt(n++,_tm.matrix);};
-  for(const t of G.tiles){if(!t.b||t.b.kind!=='airport'||t.ref!=null)continue;const line=t.b.conn?runwayLine(t):null;if(!line)continue;
+  for(const t of G.tiles){if(!t.b||t.b.kind!=='airport'||t.ref!=null||t.b.uc)continue;const line=t.b.conn?runwayLine(t):null;if(!line)continue;
     let F=flights.get(key(t));if(!F){F={wait:4+Math.random()*4,list:[],gates:{}};flights.set(key(t),F);}
     const L=line.len-1,A=[wx(line.a.x),wx(line.a.z)],B=[wx(line.b.x),wx(line.b.z)],ux=(B[0]-A[0])/(L||1),uz=(B[1]-A[1])/(L||1),RP=s=>[A[0]+ux*s,A[1]+uz*s];
     const gates=airGates(t.b);
     // schedule an arrival: a free gate with a taxi route gets a landing plane; with no taxiway, planes only do touch-and-go
-    F.wait-=dt;if(F.wait<=0&&!F.list.some(p=>p.m!=='park')){F.wait=10+Math.random()*12;
+    F.wait-=dt;if(F.wait<=0&&!F.list.some(p=>p.m!=='park')&&F.list.length<(t.b.fleet||0)){F.wait=10+Math.random()*12;
       const free=gates.filter(g=>!F.gates[g]),g=free[Math.floor(Math.random()*free.length)],rt=g!==undefined?taxiRoute(t,line,g):null;
       if(rt){const dir=rt.s<=L/2?-1:1,sTd=dir<0?Math.max(rt.s+1.4,L*.7):Math.min(rt.s-1.4,L*.3);
         F.gates[g]=1;F.list.push({m:'land',g,rt,dir,sTd,s:dir<0?L+16:-16,v:3});}
@@ -2949,6 +2963,8 @@ if((t.rt||'s')!==rt||(t.sw||'b')!==sw||!!t.bk!==bk){up.push(t);cost+=Math.max(5,
     else if(!t.b&&t.ref==null&&!t.runway){add.push(t);cost+=roadCost(rt,sw,bk,t.water);}}
   return{add,up,cost};}
 // pedestrian crossings: zebra on a straight street or a junction; footbridge or underpass on a straight street
+// crossings and stops go when the street becomes an expressway or loses its sidewalks
+function xFix(t){if(t.rt==='h'||(t.sw||'b')==='n'){t.xw=false;t.xo=null;t.bs=false;}}
 const xStraight=t=>{const m=roadMask(t);return m===5||m===10;};
 function xOK(t,k){if(!t||!t.road||t.water||t.cv||t.cvo||t._ramp||t.rt==='h'||(t.sw||'b')==='n')return false;
   if(k==='busstop')return !t.bs&&!t.xo&&!t.xw&&xStraight(t)&&roadGeo(t).sw>.06;
@@ -2959,7 +2975,7 @@ function commit(list){
   if(NETCOST[tool]){const l=netFilter(list);if(!l.length){toast(tool==='buslane'?'Bus lanes go on roads':tool==='xwalk'?'Crosswalks go on straight streets or junctions with sidewalks':tool==='busstop'?'Bus stops go on straight streets with sidewalks':XTOOLS.has(tool)?'Footbridges and underpasses go on straight streets with sidewalks':'Blocked here');Snd.play('error');return;}if(!spend(l.length*NETCOST[tool]))return;
     l.forEach(t=>{if(XTOOLS.has(tool)){if(tool==='busstop')t.bs=true;else if(tool==='xwalk')t.xw=true;else t.xo=tool==='xover'?'over':'under';}else if(tool==='buslane')t.buslane=true;else{if(tool==='taxiway')t.runway='taxi';else t[tool==='metroline'?'metro':tool]=true;t.tree=false;t.zone=null;}});l.forEach(redrawAround);if(tool!=='buslane'&&tool!=='xwalk')l.forEach((t,i)=>roadWork(t,i*.22));dirty=true;netT=0;Snd.play('road');}
   else if(isRoadTool(tool)){const r=roadPlan(list);if(!r.add.length&&!r.up.length){toast('Already built');return;}if(!spend(r.cost))return;const rt=ROADTOOL[tool];
-    for(const t of r.add){t.road=true;t.tree=false;t.zone=null;}for(const t of r.add.concat(r.up)){t.rt=rt;t.sw=rt==='h'?'n':roadOpt.sw;t.bk=rt!=='h'&&roadOpt.bk;if(rt==='h')t.buslane=false;}
+    for(const t of r.add){t.road=true;t.tree=false;t.zone=null;}for(const t of r.add.concat(r.up)){t.rt=rt;t.sw=rt==='h'?'n':roadOpt.sw;t.bk=rt!=='h'&&roadOpt.bk;if(rt==='h')t.buslane=false;xFix(t);}
     r.add.concat(r.up).forEach(redrawAround);r.add.concat(r.up).forEach((t,i)=>roadWork(t,i*.22));dirty=true;Snd.play('road');if(r.up.length&&!r.add.length)toast(r.up.length+' road tile'+(r.up.length>1?'s':'')+' upgraded');}
   else if(tool==='bulldoze'||tool==='demB'||tool==='demR')demolish(list,tool);
   else if(tool==='unzone'){list.forEach(t=>{if(t.zone&&!t.b){t.zone=null;drawTile(t);}});}
@@ -3039,7 +3055,7 @@ function roadSheet(t){const g=roadGeo(t),list=roadSel.all?streetOf(t):[t],rtK=t.
   const price=(rt,sw,bk)=>list.reduce((a,n)=>a+((n.rt||'s')===rt&&(n.sw||'b')===sw&&!!n.bk===bk?0:Math.max(5,Math.round(roadCost(rt,sw,bk,n.water)-roadCost(n.rt||'s',n.sw||'b',n.bk,n.water)*.5))),0);
   const pr=c=>G.mode==='sandbox'||!c?'':` <small>${fmt(c)}</small>`;
   sheet.innerHTML=`<button class="close" id="eClose">Close</button><h2>${t.water?'Bridge':g.r.name}</h2>
-  <p style="color:var(--mute);margin:0">${g.hw?'Fast traffic, no sidewalks or driveways':`${g.r.lanes*2} lanes · ${g.sws==='n'?'no sidewalks':g.sws==='t'?'tree-lined sidewalks':'sidewalks'}${g.bk?' · bike lanes':''}`} · speed ×${g.r.sp}</p>
+  <p style="color:var(--mute);margin:0">${g.hw?'Fast traffic, no sidewalks or driveways':`${g.r.lanes*2} lanes · ${g.sws==='n'?'no sidewalks':g.sws==='t'?'tree-lined sidewalks':'sidewalks'}${g.bk?' · bike lanes':''}`} · speed limit <b>${g.r.kmh} km/h</b></p>
   <label>Apply changes to</label><div class="seg"><button id="rsAll" class="${roadSel.all?'on':''}">Whole street (${streetOf(t).length} tiles)</button><button id="rsOne" class="${roadSel.all?'':'on'}">This tile</button></div>
   <label>Road type</label><div class="seg">${Object.entries(RT).map(([k,r])=>`<button data-rt="${k}" class="${rtK===k?'on':''}" ${locked(r.id)?'disabled':''}>${r.name}${rtK===k?'':pr(price(k,k==='h'?'n':(t.sw||'b'),k!=='h'&&!!t.bk))}</button>`).join('')}</div>
   ${g.hw?'':`<label>Sidewalks</label><div class="seg">${[['n','None'],['b','Standard'],['t','With trees']].map(([k,l])=>`<button data-rsw="${k}" class="${g.sws===k?'on':''}">${l}${g.sws===k?'':pr(price(rtK,k,!!t.bk))}</button>`).join('')}</div>
@@ -3048,7 +3064,7 @@ function roadSheet(t){const g=roadGeo(t),list=roadSel.all?streetOf(t):[t],rtK=t.
   sheet.classList.add('open');bmenu.classList.remove('open');$('eClose').onclick=()=>sheet.classList.remove('open');
   $('rsAll').onclick=()=>{roadSel.all=true;roadSheet(t);};$('rsOne').onclick=()=>{roadSel.all=false;roadSheet(t);};
   const apply=(rt,sw,bk)=>{const c=price(rt,sw,bk);if(!c&&list.every(n=>(n.rt||'s')===rt&&(n.sw||'b')===sw&&!!n.bk===bk))return;if(!spend(c))return;
-    for(const n of list){n.rt=rt;n.sw=rt==='h'?'n':sw;n.bk=rt!=='h'&&bk;if(rt==='h')n.buslane=false;}list.forEach(redrawAround);dirty=true;Snd.play('road');updateHUD();roadSheet(t);};
+    for(const n of list){n.rt=rt;n.sw=rt==='h'?'n':sw;n.bk=rt!=='h'&&bk;if(rt==='h')n.buslane=false;xFix(n);}list.forEach(redrawAround);list.forEach((n,i)=>roadWork(n,i*.22));dirty=true;Snd.play('road');updateHUD();roadSheet(t);};
   sheet.querySelectorAll('[data-rt]').forEach(b=>b.onclick=()=>{const k=b.dataset.rt;apply(k,k==='h'?'n':(t.sw&&t.sw!=='n'?t.sw:'b'),k!=='h'&&!!t.bk);});
   sheet.querySelectorAll('[data-rsw]').forEach(b=>b.onclick=()=>apply(rtK,b.dataset.rsw,!!t.bk));
   sheet.querySelectorAll('[data-rbk]').forEach(b=>b.onclick=()=>apply(rtK,t.sw||'b',b.dataset.rbk==='1'));
@@ -3056,14 +3072,19 @@ function roadSheet(t){const g=roadGeo(t),list=roadSel.all?streetOf(t):[t],rtK=t.
 }
 function renderSheet(){
   const t=selT,b=t.b;if(!b){sheet.classList.remove('open');return;}
+  if(b.uc){const o=objs[key(t)],pc=Math.round(100*((o&&o.grow)||0));sheet.classList.remove('designer');
+    sheet.innerHTML=`<button class="close" id="eClose">Close</button><h2>${b.name||SERV[b.kind]?.name||({R:'Residence',C:'Commerce',I:'Industry'}[b.zone])}</h2><div class="kv"><div><b style="color:var(--warn,#f2c14e)">${pc}%</b><small>under construction</small></div></div><small style="color:var(--mute)">It opens when the works are finished. Settings, rotation and services are locked until then.</small><p><button id="eDel" class="danger" style="width:100%">Cancel and demolish</button></p>`;
+    $('eClose').onclick=()=>{sheet.classList.remove('open');selT=null;};$('eDel').onclick=()=>{demolish([t],'demB');sheet.classList.remove('open');};clearTimeout(renderSheet._t);renderSheet._t=setTimeout(()=>{if(selT===t&&sheet.classList.contains('open'))renderSheet();},1000);return;}
   if(dirty||!cov)computeCoverage();
   const v=cov[key(t)];const isZ=!!b.zone;const s=SERV[b.kind];
   const covList=['power','water','police','fire','health','edu','park','transit'].map(k=>`<span style="color:${v[k]?'var(--good)':'var(--bad)'}">${k}</span>`).join(' · ');
   let h=`<button class="close" id="eClose">Close</button><h2>${b.name||({R:'Residence',C:'Commerce',I:'Industry'}[b.zone]+' L'+b.level)}</h2>`;
   h+=`<div class="kv">`+(isZ?`<div><b>${cap(b)}</b><small>${b.zone==='R'?'residents':'jobs'}</small></div><div><b>${b.hap??'–'}%</b><small>happiness</small></div><div><b>${b.floors}</b><small>floors</small></div>`
-    :s.cat==='tr'?(()=>{const ts=terminalStats(b),cn=termConnected(t),op=ts.ok&&cn;return`<div><b style="color:${op?'var(--good)':'var(--bad)'}">${op?'Open':'Closed'}</b><small>${!cn?CONN_HINT[b.kind]:ts.ok?'operating':'design the interior: add platforms and an entrance'}</small></div><div><b>${ts.cap.toLocaleString()}</b><small>capacity / day</small></div><div><b>${(b.riders||0).toLocaleString()}</b><small>riders / day</small></div><div><b>${ts.comfort}</b><small>comfort</small></div>`})()
+    :s.cat==='tr'?(()=>{const ts=terminalStats(b),cn=termConnected(t),fo=fleetOK(b),op=ts.ok&&cn&&fo;return`<div><b style="color:${op?'var(--good)':'var(--bad)'}">${op?'Open':'Closed'}</b><small>${!cn?CONN_HINT[b.kind]:!ts.ok?'design the interior: add platforms and an entrance':!fo?'buy '+FLEET[b.kind].vs+' below':'operating'}</small></div><div><b>${ts.cap.toLocaleString()}</b><small>capacity / day</small></div><div><b>${(b.riders||0).toLocaleString()}</b><small>riders / day</small></div><div><b>${ts.comfort}</b><small>comfort</small></div>`})()
     :`<div><b>${Math.round(s.r*LV_R[Math.min(3,b.lv||1)-1]*(.75+.25*(b.fund??100)/100)*uMod(b).r)}</b><small>tile reach</small></div><div><b>${fmt(svcUpkeep(b))}</b><small>upkeep / mo</small></div>`)+`</div>`;
   h+=`<small style="color:var(--mute)">Coverage: ${covList}</small>`;
+  if(FLEET[b.kind]){const F=FLEET[b.kind],n=b.fleet||0;h+=`<label>Vehicles · ${n} of ${F.max} ${F.vs}</label>${n?'':`<small style="color:var(--bad)">No ${F.vs} yet: the service is closed until you buy one.</small>`}
+    <div class="chips"><button id="eBuyV" class="on" ${n>=F.max?'disabled':''}>Buy a ${F.v} · ${fmt(F.cost)}</button><button id="eSellV" ${n?'':'disabled'}>Sell one · ${fmt(F.cost*.5)}</button></div><small style="color:var(--mute)">Each ${F.v} costs ${fmt(F.cost*.012)} / mo to run.</small>`;}
   if(s&&s.cat==='tr'){const lv=Math.min(3,b.lv||1);h+=`<p><button class="on" id="eInt" style="width:100%">Design terminal layout</button></p>
     <label>Lot size</label><div class="chips">${TSIZES[b.kind].map(n=>`<button data-tsz="${n}" class="${n===b.size?'on':''}">${n}×${n}</button>`).join('')}</div><small style="color:var(--mute)">A bigger lot gives a bigger floor plan. The building outside follows your layout.</small>
     <label>Level ${lv} of 3 ${'★'.repeat(lv)}${'☆'.repeat(3-lv)}</label>${lv<3?`<ul class="newl"><li>+25% passenger capacity</li><li>More comfort</li><li>${lv===1?'Rooftop solar panels':'Taller hall with a video wall'}</li></ul><button id="eTLv" class="on" style="width:100%">Upgrade to level ${lv+1}${G.mode==='sandbox'?'':' · '+fmt(Math.round(s.cost*.5*lv))}</button>`:'<small style="color:var(--mute)">Fully upgraded.</small>'}`;}
@@ -3108,6 +3129,8 @@ function renderSheet(){
   if($('eFund')){$('eFund').oninput=e=>{b.fund=+e.target.value;$('eFundV').textContent=b.fund+'%';dirty=true;};$('eFund').onchange=()=>{renderSheet();updateHUD();};}
   sheet.querySelectorAll('[data-col]').forEach(x=>x.onclick=()=>{b.color=x.dataset.col;rebuild(t);renderSheet();});
   $('eRot').onclick=()=>{b.rot=((b.rot||0)+Math.PI/2)%(Math.PI*2);rebuild(t);};
+  if($('eBuyV'))$('eBuyV').onclick=()=>{const F=FLEET[b.kind];if((b.fleet||0)>=F.max)return;if(!spend(F.cost))return;b.fleet=(b.fleet||0)+1;dirty=true;netT=0;Snd.play('build');toast(`${F.v[0].toUpperCase()+F.v.slice(1)} bought · ${b.fleet} in service`);renderSheet();updateHUD();};
+  if($('eSellV'))$('eSellV').onclick=()=>{const F=FLEET[b.kind];if(!(b.fleet>0))return;b.fleet--;if(G.mode!=='sandbox')G.money+=F.cost*.5;dirty=true;netT=0;renderSheet();updateHUD();};
   if($('eUp'))$('eUp').onclick=()=>{if(!spend(1500*b.level))return;b.level++;const d=defaultBuilding(b.zone,b.level);b.floors=Math.max(b.floors,d.floors);rebuild(t);renderSheet();updateHUD();};
   $('eDel').onclick=()=>{demolish([t],'demB');sheet.classList.remove('open');};
   if($('eInt'))$('eInt').onclick=()=>openInterior(t);
@@ -3553,7 +3576,7 @@ function openBuild(){
   bmenu.querySelectorAll('[data-b]').forEach(b=>b.onclick=()=>{clearPreview();tool=b.dataset.b;cat='build';bmenu.classList.remove('open');renderCats();});
 }
 const COVN={trade:'Port & shipyard',landmark:'Landmarks',power:'Power',water:'Water',police:'Police',fire:'Fire',edu:'Education',health:'Health',park:'Parks',transit:'Transit'};
-const LV_UP=[1,1.6,2.4];const svcUpkeep=b=>Math.round(uMod(b).up*SERV[b.kind].up*(SERV[b.kind].cat==='tr'?1:LV_UP[Math.min(3,b.lv||1)-1])*(b.fund??100)/100);
+const LV_UP=[1,1.6,2.4];const svcUpkeep=b=>Math.round((FLEET[b.kind]?(b.fleet||0)*FLEET[b.kind].cost*.012:0)+uMod(b).up*SERV[b.kind].up*(SERV[b.kind].cat==='tr'?1:LV_UP[Math.min(3,b.lv||1)-1])*(b.fund??100)/100);
 function openBudget(){
   sheet.innerHTML=`<button class="close" id="eClose">Close</button><h2>Budget</h2>
   <div class="kv"><div><b>${fmt(stats.inc)}</b><small>income / mo</small></div><div><b>${fmt(stats.exp)}</b><small>upkeep / mo</small></div><div><b>${stats.riders.toLocaleString()}</b><small>transit riders / day</small></div><div><b>${(stats.cj+stats.ij).toLocaleString()}</b><small>jobs</small></div></div>
@@ -4227,7 +4250,7 @@ function loop(now){
     acc+=dt*speed;if(acc>=1){acc=0;tick();}
     hudT-=dt;if(hudT<=0){hudT=1;updateHUD();}
     {const sdt=dt*(speed?1:0)*Math.max(speed,1);updateCars(dt*Math.max(speed,.0001)*(speed?1:0));updateTrains(Math.min(sdt,.2));updatePlanes(Math.min(sdt,.2));updateShips(Math.min(sdt,.2));Disaster.update(Math.min(sdt,.2),dt);}updatePeople(speed?dt*Math.min(speed,2):0,dt);perfTune(dt);
-    {const cdt=dt*(speed?Math.max(speed,1):0);for(const k in objs){const o=objs[k];if(o.b&&o.grow<1){consStep(o,cdt);if(o.grow>=1){const t=G.tiles[k];if(t.b&&t.b.zone){o.baked=true;markDirty(t);}}}else if(o.site&&!o.b)consEnd(o);}roadWorkStep(cdt);}
+    {const cdt=dt*(speed?Math.max(speed,1):0);for(const k in objs){const o=objs[k];if(o.b&&o.grow<1){consStep(o,cdt);if(o.grow>=1){const t=G.tiles[k];if(t.b){delete t.b.uc;dirty=true;doorT=0;if(selT===t)renderSheet();}if(t.b&&t.b.zone){o.baked=true;markDirty(t);}}}else if(o.site&&!o.b)consEnd(o);}roadWorkStep(cdt);}
   }
   if(clockMode==='device'){const d=new Date();clock=(d.getHours()+d.getMinutes()/60+d.getSeconds()/3600)/24;}else if(clockMode==='day')clock=.4;else if(clockMode==='cycle')clock=(clock+dt*Math.max(speed,.5)/180)%1;
   const ang=clock*Math.PI*2-Math.PI/2, el=Math.sin(ang);
