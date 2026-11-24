@@ -10,9 +10,9 @@ os.makedirs(OUT, exist_ok=True)
 
 # which download feeds which game surface. Each slot: (asset, size, target mean brightness or None, desaturate 0..1)
 SURF = {  # slot: (asset, colour size, normal size, target mean brightness or None, desaturate 0..1)
-    'road':  ('clean_asphalt', 2048, 2048, .80, .7),
-    'walk':  ('brushed_concrete_04', 2048, 1024, .80, .6),
-    'plaza': ('pavement_06', 1024, 1024, None, 0),
+    'road':  ('asphalt_02', 2048, 2048, 'raw', 0),            # the player's choice; true colours, the game draws them untinted
+    'walk':  ('pavement_06', 2048, 1024, 'raw', 0),            # interlocking brick pavers
+    'plaza': ('brushed_concrete_04', 1024, 1024, None, 0),
     'grass': ('rocky_terrain_02', 2048, 1024, None, 0),
     'grass2':('grass_ground', 1024, 512, None, 0),
     'sand':  ('coast_sand_01', 1024, 512, None, 0),
@@ -86,8 +86,8 @@ for slot, (asset, n, nn, target, desat) in SURF.items():
     col = resize(load(m['diff']), n)
     if 'disp' in m: col = col * cavity(load(m['disp'], True), n)[..., None]
     if target:
-        col = neutral(col, target, desat)
-        mu = col.mean((0, 1)); col = mu + (col - mu) * 1.9   # the game sees these from far away: keep the grain readable
+        if target != 'raw': col = neutral(col, target, desat)
+        mu = col.mean((0, 1)); col = mu + (col - mu) * 1.25   # the game sees these from far away: keep the grain readable
     save(col, f'ph_{slot}_col')
     if 'nor_gl' in m: save(resize(load(m['nor_gl']), nn), f'ph_{slot}_nrm', 90)
     if 'rough' in m: save(resize(load(m['rough'], True), n // 2), f'ph_{slot}_rgh')

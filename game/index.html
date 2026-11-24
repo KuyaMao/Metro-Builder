@@ -310,9 +310,10 @@ const MILESTONES = [
 ];
 /* road types: lane offsets (lo), carriage half width (cw), median half width, sidewalk width, speed factor */
 const RT={
-  s:{id:'road',name:'Street',lanes:1,lo:[.165],cw:.33,med:0,sw:.17,sp:1,cost:20},
-  a:{id:'avenue',name:'Avenue',lanes:2,lo:[.09,.27],cw:.36,med:0,sw:.14,sp:1.25,cost:45},
-  b:{id:'boulevard',name:'Boulevard',lanes:2,lo:[.15,.31],cw:.39,med:.07,sw:.11,sp:1.3,cost:70},
+  // each upgrade widens the carriageway (1 unit ~ 25 m): street 8.5 m, avenue 13.5 m, boulevard 17.5 m with a median, highway 23 m
+  s:{id:'road',name:'Street',lanes:1,lo:[.085],cw:.17,med:0,sw:.17,sp:1,cost:20},
+  a:{id:'avenue',name:'Avenue',lanes:2,lo:[.07,.205],cw:.27,med:0,sw:.15,sp:1.25,cost:45},
+  b:{id:'boulevard',name:'Boulevard',lanes:2,lo:[.11,.265],cw:.35,med:.06,sw:.12,sp:1.3,cost:70},
   h:{id:'highway',name:'Highway',lanes:2,lo:[.135,.345],cw:.46,med:.03,sw:0,sp:1.9,cost:110}};
 const ROADTOOL={road:'s',avenue:'a',boulevard:'b',highway:'h'};
 const isRoadTool=k=>k in ROADTOOL;
@@ -620,9 +621,14 @@ function antiTile(m,k2){m.onBeforeCompile=sh=>{sh.fragmentShader=sh.fragmentShad
   diffuseColor*=sampledDiffuseColor;
   #endif`);};m.customProgramCacheKey=()=>'at'+k2;}
 // large, soft patches of darker/lighter surface (wear, repairs, damp): k = map-UV units per world unit
-function macroVar(m,k,amp){m.onBeforeCompile=sh=>{sh.fragmentShader=sh.fragmentShader.replace('#include <map_fragment>',`
+function macroVar(m,k,amp,at){m.onBeforeCompile=sh=>{sh.fragmentShader=sh.fragmentShader.replace('#include <map_fragment>',`
   #ifdef USE_MAP
   vec4 sampledDiffuseColor=texture2D(map,vMapUv);
+  ${at?`{vec2 q=floor(vMapUv);float h=fract(sin(dot(q,vec2(12.9898,78.233)))*43758.5453);vec2 f=fract(vMapUv);
+    // each repeat of the texture is flipped/rotated at random and blended with a rotated copy: the crack pattern stops lining up
+    vec2 r=h<.25?f:h<.5?vec2(1.-f.y,f.x):h<.75?vec2(1.-f.x,1.-f.y):vec2(f.y,1.-f.x);
+    vec4 sA=textureGrad(map,r+q,dFdx(vMapUv),dFdy(vMapUv)),sB=texture2D(map,mat2(.8,-.6,.6,.8)*vMapUv*.61+.29);
+    sampledDiffuseColor=mix(sA,sB,.35);}`:''}
   vec2 w=vMapUv/${k.toFixed(3)};
   #define HN(p) fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453)
   vec2 i0=floor(w*2.7),f0=fract(w*2.7);f0=f0*f0*(3.-2.*f0);
@@ -631,7 +637,7 @@ function macroVar(m,k,amp){m.onBeforeCompile=sh=>{sh.fragmentShader=sh.fragmentS
   float n2=mix(mix(HN(i1),HN(i1+vec2(1,0)),f1.x),mix(HN(i1+vec2(0,1)),HN(i1+vec2(1,1)),f1.x),f1.y);
   sampledDiffuseColor.rgb*=1.+${amp.toFixed(3)}*((n1-.5)*1.3+(n2-.5)*.7);
   diffuseColor*=sampledDiffuseColor;
-  #endif`);};m.customProgramCacheKey=()=>'mv'+k+amp;}
+  #endif`);};m.customProgramCacheKey=()=>'mv'+k+amp+(at?'a':'');}
 // skies from Poly Haven: RGBE pairs (rgb mantissa + exponent) -> half-float equirect textures, scaled to the game's light level
 let skyHDR=null;
 function rgbeTex(k,target){const a=PACK[k+'_rgb'],b=PACK[k+'_exp'];if(!a||!b)return null;const W=a.naturalWidth,H=a.naturalHeight,cv=document.createElement('canvas');cv.width=W;cv.height=H;const g=cv.getContext('2d',{willReadFrequently:true});
@@ -649,9 +655,11 @@ function applyPack(){
   for(const k in WALL)if(bgs[k].col)swap(WALL[k],facadeSet(k,bgs[k]));
   // one world unit is about 25 m: textures repeat at their real-world size
   const surf=(m,ph,old,rep,ns)=>{const k=PACK[ph+'_col']?ph:PACK[old+'_col']?old:null;if(!k)return;const r=k===ph?rep:1;m.map=packTex(k+'_col',true,r);if(PACK[k+'_nrm']){m.normalMap=packTex(k+'_nrm',false,r);m.normalScale.set(ns,ns);}if(PACK[k+'_rgh']){m.roughnessMap=packTex(k+'_rgh',false,r);m.roughness=1;}m.needsUpdate=true;};
-  surf(roadBatchMat,'ph_road','asphalt',8,.8);           // UV 1.5 per unit x 8 = a 2.1 m asphalt sample
-  surf(walkMat,'ph_walk','paving',3,.9);                 // UV 4 per unit x 3 = 2 m concrete slabs
-  if(PACK.ph_road_col){macroVar(roadBatchMat,12,.22);macroVar(walkMat,12,.16);}
+  // the Poly Haven road and sidewalk textures are shown in their own colours (no game tint), so redraw the streets once
+  if(PACK.ph_road_col){RCOL.asp=RCOL.hasp=0xffffff;RCOL.walk=0xfefefe;if(G)for(const t of G.tiles)if(t.road)markDirty(t);}
+  surf(roadBatchMat,'ph_road','asphalt',7,.8);           // UV 1.5 per unit x 7 = a 2.4 m asphalt sample
+  surf(walkMat,'ph_walk','paving',3.5,1);               // UV 4 per unit x 3.5 = 1.8 m of brick pavers
+  if(PACK.ph_road_col){macroVar(roadBatchMat,10.5,.18,true);macroVar(walkMat,14,.12);}
   surf(sandMat,'ph_sand','sand',8,1);if(PACK.ph_sand_col)sandMat.color.set(0xfff4dc);else if(PACK.sand_col)sandMat.color.set(0xffe6bd);
   {const gm=ground.material;if(PACK.ph_grass_col){const r=GI*25/90;gm.map=packTex('ph_grass_col',true,r);gm.normalMap=packTex('ph_grass_nrm',false,r*3);gm.normalScale.set(.7,.7);gm.roughnessMap=packTex('ph_grass_rgh',false,r);gm.roughness=1;antiTile(gm,1.53);}
     else if(PACK.grass_col){gm.map=packTex('grass_col',true,GI/6);gm.normalMap=packTex('grass_nrm',false,GI/1.3);gm.normalScale.set(.6,.6);}gm.color.set(0xffffff);gm.needsUpdate=true;}
@@ -882,6 +890,7 @@ const asphaltTex=canvasTex(512,512,(g,w,h)=>{const d=g.createImageData(w,h);for(
 const roadBatchMat=new THREE.MeshStandardMaterial({map:asphaltTex,vertexColors:true,roughness:.88,metalness:0});
 // sidewalks and plazas: concrete paving with world-space UVs (4 slabs a metre-and-a-half wide per tile edge)
 const walkMat=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.9,metalness:0});
+const paintRoadMat=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.75,metalness:0});
 const sandMat=new THREE.MeshStandardMaterial({color:0xd9c79c,roughness:.95});
 /* ---------- real 3D models (modelpack.js, CC0 Poly Haven, decimated): metres, Y up ---------- */
 const MODEL_U=1/25;   // one world unit is about 25 m
@@ -915,8 +924,18 @@ function roadParts(t,out){
   // everything else: sidewalk (raised), verge or highway shoulder
   const outer=[[-.5,-.5,-C,-C],[C,-.5,.5,-C],[-.5,C,-C,.5],[C,C,.5,.5]];if(!(m&1))outer.push([-C,-.5,C,-C]);if(!(m&4))outer.push([-C,C,C,.5]);if(!(m&8))outer.push([-.5,-C,-C,C]);if(!(m&2))outer.push([C,-C,.5,C]);
   for(const d of[1,2,4,8])if(m&d&&ag[d].Ca<C-.002){const a=ag[d].Ca;if(d===1)outer.push([-C,-.5,-a,-C],[a,-.5,C,-C]);if(d===4)outer.push([-C,C,-a,.5],[a,C,C,.5]);if(d===8)outer.push([-.5,-C,-C,-a],[-.5,a,-C,C]);if(d===2)outer.push([C,-C,.5,-a],[C,a,.5,C]);}
+  // narrow streets: the sidewalk is sw wide and the rest of the tile is a grass strip (the ground shows through)
+  const E=C+sw,vg=sws!=='n'&&!t.water&&!t._ramp&&E<.46&&!hw;
+  const cDist=(px,pz)=>{let d=Math.hypot(Math.max(0,Math.abs(px)-C),Math.max(0,Math.abs(pz)-C));for(const dd of[1,2,4,8])if(m&dd){const a=ag[dd].Ca,ex=dd&5?Math.max(0,Math.abs(px)-a):Math.max(0,(dd===2?C-px:px+C)),ez=dd&5?Math.max(0,(dd===4?C-pz:pz+C)):Math.max(0,Math.abs(pz)-a);d=Math.min(d,Math.hypot(ex,ez));}return d;};
   for(const[x0,z0,x1,z1]of outer){if(Math.abs(x1-x0)<.002||Math.abs(z1-z0)<.002)continue;
-    if(sws==='n')q(x0,z0,x1,z1,y-.0005,t.water?0x9a958c:RCOL.verge);else bx(x0,z0,x1,z1,y-.004,.01,RCOL.walk);}
+    if(sws==='n'){q(x0,z0,x1,z1,y-.0005,t.water?0x9a958c:RCOL.verge);continue;}
+    if(!vg){bx(x0,z0,x1,z1,y-.004,.01,RCOL.walk);continue;}
+    const cut=(a0,a1)=>{const p=[Math.min(a0,a1),Math.max(a0,a1)];for(const e of[-E,E])if(e>p[0]+.002&&e<p[p.length-1]-.002)p.splice(p.length-1,0,e);return p.sort((u,v)=>u-v);};
+    const xs=cut(x0,x1),zs=cut(z0,z1);
+    for(let i=0;i<xs.length-1;i++)for(let j=0;j<zs.length-1;j++){const a=xs[i],b=xs[i+1],c=zs[j],d=zs[j+1];if(b-a<.002||d-c<.002)continue;
+      if(cDist((a+b)/2,(c+d)/2)>sw+.004){// grass strip with a low kerb along the sidewalk side
+        continue;}
+      bx(a,c,b,d,y-.004,.01,RCOL.walk);}}
   // runs: whole tile for straight pieces, otherwise each arm up to the junction
   const own={r,bk,hw},runs=[];if(straight)runs.push(m===5?{ax:'z',s0:-.5,s1:.5,g:own}:{ax:'x',s0:-.5,s1:.5,g:own});
   else{if(m&1)runs.push({ax:'z',s0:-.5,s1:-C,g:ag[1]});if(m&4)runs.push({ax:'z',s0:C,s1:.5,g:ag[4]});if(m&8)runs.push({ax:'x',s0:-.5,s1:-C,g:ag[8]});if(m&2)runs.push({ax:'x',s0:C,s1:.5,g:ag[2]});}
@@ -927,8 +946,8 @@ function roadParts(t,out){
   const lbox=(R,u,w,h,c,trim=0)=>{const a=R.s0+(R.s0>-.5?trim:0),b=R.s1-(R.s1<.5?trim:0);if(b-a<.01)return;R.ax==='z'?bx(u-w/2,a,u+w/2,b,y,h,c):bx(a,u-w/2,b,u+w/2,y,h,c);};
   for(const R of runs){const r=R.g.r,bk=R.g.bk;
     if(r===RT.s)line(R,0,.018,RCOL.yel,true);
-    else if(r===RT.a){line(R,-.011,.009,RCOL.yel,false);line(R,.011,.009,RCOL.yel,false);for(const sg of[-1,1])line(R,sg*.18,.013,RCOL.wht,true);}
-    else if(r===RT.b){lbox(R,0,r.med*2,.012,RCOL.curb,.02);lbox(R,0,r.med*2-.016,.0135,RCOL.med,.02);for(const sg of[-1,1])line(R,sg*.23,.013,RCOL.wht,true);}
+    else if(r===RT.a){line(R,-.011,.009,RCOL.yel,false);line(R,.011,.009,RCOL.yel,false);for(const sg of[-1,1]){line(R,sg*(r.lo[0]+r.lo[1])/2,.011,RCOL.wht,true);if(!bk)line(R,sg*(r.cw-.014),.008,RCOL.wht,false);}}
+    else if(r===RT.b){lbox(R,0,r.med*2,.012,RCOL.curb,.02);lbox(R,0,r.med*2-.016,.0135,RCOL.med,.02);for(const sg of[-1,1]){line(R,sg*(r.lo[0]+r.lo[1])/2,.011,RCOL.wht,true);if(!bk)line(R,sg*(r.cw-.014),.008,RCOL.wht,false);}}
     else{lbox(R,0,.03,.03,RCOL.bar);lbox(R,0,.05,.008,RCOL.bar);for(const sg of[-1,1]){line(R,sg*.24,.014,RCOL.wht,true);line(R,sg*.045,.008,RCOL.yel,false);line(R,sg*.44,.01,RCOL.wht,false);lbox(R,sg*.485,.008,.026,RCOL.rail);}}
     if(bk)for(const sg of[-1,1]){strip(R,sg>0?r.cw:-r.cw-bk,sg>0?r.cw+bk:-r.cw,RCOL.bike);line(R,sg*r.cw,.007,RCOL.wht,false,ym+.0004);}
   }
@@ -964,16 +983,21 @@ function bridgeParts(t,m,X,Z,out){const ns=!!(m&5)&&!(m&10),P=(u,v)=>ns?[X+v,Z+u
     B(0,s*.488,1,.012,.184,.008,steel);B(0,s*.488,1,.005,.162,.005,steel);}
   // long crossings: a cable-stayed pylon over the middle tile
   const[r0,r1]=bridgeRun(t,ns),L=r0+r1+1;
-  if(L>=5&&r0===Math.floor((L-1)/2)){const H=1.05;
-    for(const s of[-1,1]){const[a,b]=P(0,s*.47);out.bdet.push([new THREE.BoxGeometry(.07,H+.1,.07).translate(a,(H+.1)/2-.05,b),0xe8e6e1]);
-      for(const k of[1,2,3])for(const dir of[-1,1]){const d=k*Math.min(1,Math.min(r0,r1)/3),[ca,cb]=P(dir*d,s*.47);out.bdet.push([segG(a,H-.05*k,b,ca,.15,cb,.005),0xf2f2f2]);}}
-    for(const y of[.32,H-.02])B(0,0,.06,.94,y,.05,0xe8e6e1);
-    for(const s of[-1,1]){const[a,b]=P(0,s*.47);out.lit.push([new THREE.SphereGeometry(.016,8,6).translate(a,H+.065,b),0xff3b30]);}}}
+  if(L>=5&&r0===Math.floor((L-1)/2)){const H=1.25,lv=.57,conc=0xdedbd4;
+    // H-shaped pylon: the legs stand outside the deck, the lower strut runs under it and the upper one far above traffic
+    for(const s of[-1,1]){const[a,b]=P(0,s*lv);
+      const leg=new THREE.CylinderGeometry(.03,.045,H+.18,4,1).rotateY(Math.PI/4).scale(1,1,1.4);if(!ns)leg.rotateY(Math.PI/2);out.bdet.push([leg.translate(a,(H+.18)/2-.18,b),conc]);
+      // stay cables: a fan from the top of each leg down to anchors along the deck edge, both ways
+      const reach=Math.min(r0,r1)+.4;for(let k=1;k<=6;k++)for(const dir of[-1,1]){const d=k/6*reach,[ca,cb]=P(dir*d,s*.49),[ta,tb]=P(dir*.02,s*lv);out.bdet.push([segG(ta,H-.04-k*.035,tb,ca,.17,cb,.0035),0xf4f4f4]);}
+      out.lit.push([new THREE.SphereGeometry(.016,8,6).translate(a,H+.01,b),0xff3b30]);}
+    B(0,0,.08,2*lv+.06,-.02,.06,conc);           // lower strut, under the deck
+    B(0,0,.07,2*lv+.06,H-.1,.07,conc);           // upper strut, well above the traffic
+    for(const s of[-1,1])B(0,s*(.5+.035),.12,.07,.09,.06,conc);}}
 // wooden electricity poles every other tile along one side of a street, with sagging wires to the next pole
-function powerPole(t,ns,X,Z,C,sw,out){const k=ns?t.z:t.x;if(k%2!==1)return;const side=1,v=side*(C+Math.min(sw*.7,sw-.012));
-  const pick=((t.x*31+t.z*17)>>>0)%7,key=pick===0?'pole01':pick<4?'pole02':'pole03',g=modelG(key);if(!g)return;
-  const P=(u,vv)=>ns?[X+vv,Z+u]:[X+u,Z+vv],[px,pz]=P(0,v),H=modelH(key);
-  if(!ns)g.rotateY(Math.PI/2);g.translate(px,.012,pz);out.bdet.push([g,null]);
+// where the pole-mounted street lights stand on a straight street (also used by the lamp placement)
+function poleLine(t){if(!t.road||t.water||t._ramp||t.cv||t.xo)return null;const m=roadMask(t);if(m!==5&&m!==10)return null;const g=roadGeo(t);if(g.hw||g.sws==='n'||g.sw<=.02)return null;return{v:g.C+Math.min(g.sw*.7,g.sw-.012)};}
+function powerPole(t,ns,X,Z,C,sw,out){const k=ns?t.z:t.x;if(k%2!==1)return;const pl=poleLine(t);if(!pl)return;const v=pl.v,key='pole02';
+  const P=(u,vv)=>ns?[X+vv,Z+u]:[X+u,Z+vv],H=modelH(key)*POLE_S;
   // wires to the next pole two tiles ahead (only if that tile is the same kind of straight street)
   const n=ns?T(t.x,t.z+2):T(t.x+2,t.z),n1=ns?T(t.x,t.z+1):T(t.x+1,t.z);if(!n||!n1||!n.road||!n1.road||n.cv||n1.cv||roadMask(n)!==roadMask(t)||roadMask(n1)!==roadMask(t)||n.water)return;
   const top=.012+H*.9;for(const o of[-.018,0,.018]){let prev=null;for(let i=0;i<=8;i++){const f=i/8,[x,z]=P(f*2,v+o),y=top-(o===0?.012:0)-Math.sin(f*Math.PI)*.022;if(prev)out.bdet.push([segG(prev[0],prev[1],prev[2],x,y,z,.0009),0x1e1e1e]);prev=[x,y,z];}}}
@@ -1017,6 +1041,8 @@ function partsMeshes(out,parent){const list=[];
   const add=(k,mt,shadow)=>{if(!out[k]||!out[k].length)return;const g=mergeG(out[k],true);for(const[gg]of out[k])gg.dispose();const m=new THREE.Mesh(g,mt);m.castShadow=shadow;m.receiveShadow=true;parent.add(m);list.push(m);};
   add('ao',aoDecalMat,false);  add('res',WALL.res,true);add('brk',WALL.brk,true);add('glass',WALL.glass,true);add('ind',WALL.ind,true);add('det',bDetMat,true);add('lit',bLitMat,false);if(out.road&&out.road.length){const wk=[],rd=[];for(const e of out.road)(e[1]===RCOL.walk?wk:rd).push(e);out.road=rd;if(wk.length){const g=mergeG(wk,true);for(const[gg]of wk)gg.dispose();worldUV(g,4);const m=new THREE.Mesh(g,walkMat);m.receiveShadow=true;parent.add(m);list.push(m);}}
   if(out.sand&&out.sand.length){const g=mergeG(out.sand,true);for(const[gg]of out.sand)gg.dispose();worldUV(g,1.2);const m=new THREE.Mesh(g,sandMat);m.receiveShadow=true;parent.add(m);list.push(m);}
+  // road paint, kerbs and barriers are not drawn with the asphalt texture (it would darken the markings)
+  if(out.road&&out.road.length&&roadBatchMat.map&&RCOL.asp===0xffffff){out.paint=out.road.filter(e=>e[1]!==RCOL.asp&&e[1]!==RCOL.hasp);out.road=out.road.filter(e=>e[1]===RCOL.asp||e[1]===RCOL.hasp);add('paint',paintRoadMat,false);}
   add('road',roadBatchMat,false);add('zone',zoneOvMat,false);add('bdet',bDetMat,true);
   return list;}
 function markDirty(t){const c=chunks[Math.floor(t.z/CH)*NC+Math.floor(t.x/CH)];if(c)c.dirty=true;}
@@ -1875,11 +1901,16 @@ for(const m of[beams,flares,rflares]){m.frustumCulled=false;m.renderOrder=2;scen
 // street lamps
 const LAMPMAX=1400;
 const lampBulbMat=new THREE.MeshBasicMaterial({vertexColors:true});
-const lampPole=new THREE.InstancedMesh(mergeG([[new THREE.CylinderGeometry(.007,.01,.52,8).translate(0,.26,0),0x50565d],[new THREE.CylinderGeometry(.016,.019,.035,8).translate(0,.017,0),0x3f444a],
-  [BX(.006,.006,.15,0,.51,.075),0x50565d],[new THREE.BoxGeometry(.004,.05,.004).rotateX(.7).translate(0,.49,.025),0x50565d],[BX(.028,.012,.055,0,.505,.16),0x3a3f45]]),detMat,LAMPMAX);
-const lampBulb=new THREE.InstancedMesh(mergeG([[BX(.022,.003,.042,0,.4985,.16),0xffe2a6]]),lampBulbMat,LAMPMAX);
+// street lights hang from the wooden electricity pole (Poly Haven modular_electricity_poles): pole x1.4 so it stands ~8.5 m
+const LAMP_Y=.3,POLE_S=1.4;
+const lampPole=new THREE.InstancedMesh((()=>{const pg=modelG('pole02');const P=[];
+  if(pg){pg.scale(POLE_S,POLE_S,POLE_S);pg.rotateY(Math.PI/2);P.push([pg,null]);}else P.push([new THREE.CylinderGeometry(.007,.01,LAMP_Y+.02,8).translate(0,(LAMP_Y+.02)/2,0),0x50565d]);
+  // steel bracket arm reaching over the kerb, with the luminaire at its end
+  P.push([BX(.005,.005,.16,0,LAMP_Y+.012,.08),0x5b6168],[new THREE.BoxGeometry(.004,.04,.004).rotateX(.7).translate(0,LAMP_Y-.006,.02),0x5b6168],[BX(.026,.011,.05,0,LAMP_Y+.007,.16),0x3a3f45]);
+  return mergeG(P,true);})(),detMat,LAMPMAX);
+const lampBulb=new THREE.InstancedMesh(mergeG([[BX(.02,.003,.038,0,LAMP_Y+.0005,.16),0xffe2a6]]),lampBulbMat,LAMPMAX);
 const lampPool=new THREE.InstancedMesh(new THREE.PlaneGeometry(.95,.95).rotateX(-Math.PI/2).translate(0,.018,.2),addM(flareTex,0xffd596),LAMPMAX);
-const lampHalo=new THREE.InstancedMesh(mergeG([[new THREE.PlaneGeometry(.14,.14).translate(0,.49,.16),0xffffff],[new THREE.PlaneGeometry(.14,.14).rotateY(Math.PI/2).translate(0,.49,.16),0xffffff]]),addM(flareTex,0xffe2b0),LAMPMAX);
+const lampHalo=new THREE.InstancedMesh(mergeG([[new THREE.PlaneGeometry(.14,.14).translate(0,LAMP_Y-.008,.16),0xffffff],[new THREE.PlaneGeometry(.14,.14).rotateY(Math.PI/2).translate(0,LAMP_Y-.008,.16),0xffffff]]),addM(flareTex,0xffe2b0),LAMPMAX);
 lampPole.castShadow=true;for(const m of[lampPole,lampBulb,lampPool,lampHalo]){m.count=0;m.frustumCulled=false;scene.add(m);}lampPool.renderOrder=lampHalo.renderOrder=2;
 let lampsDirty=true,lampT=0;
 const FURN={bench:mergeG([[BX(.13,.006,.03,0,.034,0),0x8a5a33],[BX(.13,.022,.005,0,.052,-.014).rotateX(-.15),0x8a5a33],...[-.055,.055].map(x=>[BX(.006,.034,.03,x,.017,0),0x33373c]),...[-.055,.055].map(x=>[BX(.006,.006,.006,x,.06,-.016),0x33373c])]),
@@ -1897,9 +1928,9 @@ function lampUpdate(dt){lampT-=dt;if(!lampsDirty||lampT>0||!G)return;furnUpdate(
   if(G.curves)for(const id in G.curves){const c=G.curves[id];if(!c.S)continue;const g=CURVE_G(c),e=g.hw?.47:Math.min(.47,g.C+Math.max(.018,g.sw*.15));let side=1;
     for(let ss=.6;ss<c.S.len-.3&&n<LAMPMAX;ss+=1.6){const q=curveAt(c,ss),nx=-q.tz,nz=q.tx;dummy.position.set(q.x+nx*side*e,0,q.z+nz*side*e);dummy.rotation.set(0,Math.atan2(-nx*side,-nz*side),0);dummy.scale.set(1,1,1);dummy.updateMatrix();for(const im of[lampPole,lampBulb,lampPool,lampHalo])im.setMatrixAt(n,dummy.matrix);n++;side=-side;}}
   for(const t of G.tiles){if(!t.road||t.water||t.cv||n>=LAMPMAX)continue;const m=roadMask(t),ew=(m&10)&&!(m&5),ns=(m&5)&&!(m&10);
-    const g=roadGeo(t),e=g.hw?.47:Math.min(.47,g.C+Math.max(.018,g.sw*.15));
-    if(ew&&t.x%2===0){const side=(t.x/2)%2?1:-1;dummy.position.set(wx(t.x),0,wx(t.z)+side*e);dummy.rotation.set(0,side>0?Math.PI:0,0);}
-    else if(ns&&t.z%2===0){const side=(t.z/2)%2?1:-1;dummy.position.set(wx(t.x)+side*e,0,wx(t.z));dummy.rotation.set(0,side>0?-Math.PI/2:Math.PI/2,0);}
+    const g=roadGeo(t),pl=poleLine(t),e=pl?pl.v:g.hw?.47:Math.min(.47,g.C+Math.max(.018,g.sw*.15));
+    if(ew&&t.x%2===1){const side=pl?1:(((t.x-1)/2)%2?1:-1);dummy.position.set(wx(t.x),0,wx(t.z)+side*e);dummy.rotation.set(0,side>0?Math.PI:0,0);}
+    else if(ns&&t.z%2===1){const side=pl?1:(((t.z-1)/2)%2?1:-1);dummy.position.set(wx(t.x)+side*e,0,wx(t.z));dummy.rotation.set(0,side>0?-Math.PI/2:Math.PI/2,0);}
     else continue;
     if(t._ramp)dummy.position.y=surfY(t,dummy.position.x,dummy.position.z)-.012;
     dummy.scale.set(1,1,1);dummy.updateMatrix();for(const im of[lampPole,lampBulb,lampPool,lampHalo])im.setMatrixAt(n,dummy.matrix);n++;}
@@ -2492,7 +2523,7 @@ function runwayParts(t,out){const nb=netNb(t,'runway'),ew=nb.some(n=>n.z===t.z)|
   for(const s of[-1,1])for(const o of[-.25,.25])out.lit.push([new THREE.SphereGeometry(.012,6,4).translate(ew?x+o:x+s*.47,.02,ew?z+s*.47:z+o),0xfff2c0]);
   if(nb.length===1){const n=nb[0],dx=Math.sign(wx(t.x)-wx(n.x)),dz=Math.sign(wx(t.z)-wx(n.z));for(let k=-3;k<=3;k++){if(!k)continue;D(ew?RB(.18,.003,.045,x+dx*.2,.016,z+k*.11):RB(.045,.003,.18,x+k*.11,.016,z+dz*.2),0xf2f2f2);}
     for(let k=-4;k<=4;k++)out.lit.push([new THREE.SphereGeometry(.012,6,4).translate(ew?x+dx*.49:x+k*.1,.02,ew?z+k*.1:z+dz*.49),k%2?0x3ddc84:0xff3b30]);}}
-function busLaneParts(t,out){const m=roadMask(t),ew=(m&10)&&!(m&5),ns=(m&5)&&!(m&10);if(!ew&&!ns)return;const x=wx(t.x),z=wx(t.z),r=rtOf(t),u=r.lo[r.lanes-1],w=r.lanes>1?.155:.13;
+function busLaneParts(t,out){const m=roadMask(t),ew=(m&10)&&!(m&5),ns=(m&5)&&!(m&10);if(!ew&&!ns)return;const x=wx(t.x),z=wx(t.z),r=rtOf(t),u=r.lo[r.lanes-1],w=(r.cw-r.med)/r.lanes-.012;
   for(const s of[-1,1]){out.bdet.push([ew?RB(1,.002,w,x,.0125,z+s*u):RB(w,.002,1,x+s*u,.0125,z),0xa8322a]);
     out.bdet.push([ew?RB(.12,.0025,.03,x,.0135,z+s*u):RB(.03,.0025,.12,x+s*u,.0135,z),0xf2f2f2]);}}
 // station connection rules
@@ -3782,8 +3813,8 @@ function curveParts(c,out){const g=CURVE_G(c),{r,hw,bk,C,sw,sws}=g,y=.012,ym=y+.
     else{rib(0,L,sg>0?C:-C-sw,sg>0?C+sw:-C,y+.006,RCOL.walk);rib(0,L,sg>0?C:-C-.012,sg>0?C+.012:-C,y+.0065,RCOL.curb);
       if(sws==='t'&&sw>=.07)for(let s0=.3;s0<L-.2;s0+=.55){const u=sg*(C+sw*.27),h=Math.min(.03,sw*.25);rib(s0,s0+2*h,u-h,u+h,y+.0068,RCOL.pit);}}}
   if(r===RT.s)line(0,.018,RCOL.yel,true);
-  else if(r===RT.a){line(-.011,.009,RCOL.yel,false);line(.011,.009,RCOL.yel,false);for(const sg of[-1,1])line(sg*.18,.013,RCOL.wht,true);}
-  else if(r===RT.b){rib(.02,L-.02,-r.med,r.med,y+.012,RCOL.curb);rib(.02,L-.02,-r.med+.008,r.med-.008,y+.0135,RCOL.med);for(const sg of[-1,1])line(sg*.23,.013,RCOL.wht,true);}
+  else if(r===RT.a){line(-.011,.009,RCOL.yel,false);line(.011,.009,RCOL.yel,false);for(const sg of[-1,1])line(sg*(r.lo[0]+r.lo[1])/2,.011,RCOL.wht,true);}
+  else if(r===RT.b){rib(.02,L-.02,-r.med,r.med,y+.012,RCOL.curb);rib(.02,L-.02,-r.med+.008,r.med-.008,y+.0135,RCOL.med);for(const sg of[-1,1])line(sg*(r.lo[0]+r.lo[1])/2,.011,RCOL.wht,true);}
   else{rib(0,L,-.025,.025,y+.03,RCOL.bar);for(const sg of[-1,1]){line(sg*.24,.014,RCOL.wht,true);line(sg*.045,.008,RCOL.yel,false);line(sg*.44,.01,RCOL.wht,false);}}
   if(bk)for(const sg of[-1,1]){rib(0,L,sg>0?r.cw:-r.cw-bk,sg>0?r.cw+bk:-r.cw,ym,RCOL.bike);line(sg*r.cw,.007,RCOL.wht,false);}
   // bridge structure where the curve is lifted
@@ -3972,7 +4003,7 @@ function updateWeather(dt){const w=weatherNow(),wantRain=w==='rain'?1:0,wantClou
   if(rain.visible){const R=Math.max(6,Math.min(30,cam.dist*.9)),H=R*.9,len=.05+R*.012;for(let i=0;i<RAIN_N;i++){const sx=rainSeed[i*3],sz=rainSeed[i*3+1];let sy=(rainSeed[i*3+2]-performance.now()*.00045*(1+sx*.3))%1;if(sy<0)sy+=1;
       const x=cam.tx+(sx-.5)*2*R,z=cam.tz+(sz-.5)*2*R,y=sy*H;rainPos.set([x,y,z,x+.01,y+len,z+.01],i*6);}rainGeo.attributes.position.needsUpdate=true;}
   // wet streets: darker, glossier asphalt that reflects lights
-  roadBatchMat.roughness=(roadBatchMat.roughnessMap?1:.88)-wetF*.58;walkMat.roughness=(walkMat.roughnessMap?1:.9)-wetF*.5;walkMat.color.setScalar(1-wetF*.2);roadBatchMat.color.setScalar(1-wetF*.25);roadBatchMat.envMap=wetF>.05?envRT.texture:null;roadBatchMat.envMapIntensity=wetF*.8;if((wetF>.05)!==roadBatchMat._wet){roadBatchMat._wet=wetF>.05;roadBatchMat.needsUpdate=true;}}
+  roadBatchMat.roughness=(roadBatchMat.roughnessMap?1:.88)-wetF*.58;paintRoadMat.roughness=.75-wetF*.45;walkMat.roughness=(walkMat.roughnessMap?1:.9)-wetF*.5;walkMat.color.setScalar(1-wetF*.2);roadBatchMat.color.setScalar(1-wetF*.25);roadBatchMat.envMap=wetF>.05?envRT.texture:null;roadBatchMat.envMapIntensity=wetF*.8;if((wetF>.05)!==roadBatchMat._wet){roadBatchMat._wet=wetF>.05;roadBatchMat.needsUpdate=true;}}
 let hudT=0,clockMode=(()=>{try{return localStorage.getItem('metrob_clock')||'device';}catch(e){return'device';}})(),clock=.35,last=performance.now(),acc=0;
 const _grey=new THREE.Color(),hazeDay=new THREE.Color(0x86a59a),haze=new THREE.Color(),_cw=new THREE.Color(0xffffff),skyDay=new THREE.Color(0xa9d3ec),skyNight=new THREE.Color(0x0b1430),skyDusk=new THREE.Color(0xf2a36b),sky=new THREE.Color();
 function resize(){renderer.setSize(innerWidth,innerHeight,false);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();postResize();}
