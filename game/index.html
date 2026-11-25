@@ -798,8 +798,16 @@ function setLot(t,SX,SZ=SX){const b=t.b,ox=LX(b),oz=LZ(b);if(SX===ox&&SZ===oz)re
 // resize the lot to fit the current design; false (and nothing changed) if there is no room
 function fitLot(t,rot){const b=t.b,d=desDims(b),[nx,nz]=lotNeed(b,d.wm,d.dm,rot);return setLot(t,nx,nz);}
 const styleOf=b=>b.style||STYLES[Math.floor(hrand(b,20)*3)];
+// mid-rise lots can be one of the Quaternius Downtown City buildings (real size: 12–21 m wide, 17–28 m tall), brick tinted per lot
+function mkModel(b){if(!window.MODELPACK||!MODELPACK.mk_small||b.des||b.level!==2||(b.zone!=='R'&&b.zone!=='C')||LX(b)!==1||LZ(b)!==1)return null;
+  if(hrand(b,91)>.5)return null;const r=hrand(b,92);return b.zone==='R'?(r<.6?'mk_small':'mk_medium'):(r<.5?'mk_medium':'mk_large');}
+const MK_BRICK=[0x7a4434,0x8c5a44,0x6b3b30,0x9a7a62,0x5e4a44,0xa48a70];
+function mkParts(b,k){const P={res:[],brk:[],glass:[],ind:[],det:[],lit:[]},br=MK_BRICK[Math.floor(hrand(b,93)*MK_BRICK.length)];
+  P.det.push([RB(.98,.004,.98,0,0,0),0xb8b2a6]);P.det.push([modelG(k,{map:{'705040':br,'808078':shade(br,1.25)}}),null]);
+  const fp=k==='mk_large'?.68:k==='mk_medium'?.55:.5;P.det.push([RB(.09,.004,.5-fp/2,0,.001,.25+fp/4),0xcfc9bd]);return P;}
 function buildingParts(b){
   if(b.des&&b.d)return designParts(b);
+  {const mk=mkModel(b);if(mk)return mkParts(b,mk);}
   const P={res:[],brk:[],glass:[],ind:[],det:[],lit:[]};const st=styleOf(b);
   const col=new THREE.Color(b.color).getHex(),f=Math.max(1,b.floors|0),fp=b.fp,H=f*FLOOR,lv=b.level;
   const W=(k,w,h,d,x,y,z,c)=>P[k==='res'&&st==='classic'?'brk':k].push([wallBox(w,h,d,x,y,z,k),c==null?col:c]);
@@ -899,8 +907,8 @@ const _mg={};
 // a model as one geometry (vertex colours from each material), base centred on the origin, in world units
 function modelG(k,opt={}){const key=k+JSON.stringify(opt);if(_mg[key])return _mg[key].clone();const M=window.MODELPACK&&window.MODELPACK[k];if(!M)return null;
   const b=M.b,cx=(b[0]+b[3])/2,cz=(b[2]+b[5])/2,y0=b[1],P=[];
-  for(const g of M.g){const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(g.p,3));geo.setAttribute('normal',new THREE.Float32BufferAttribute(g.n,3));{const nn=geo.attributes.normal.array;for(let i=0;i<nn.length;i+=3){const l=Math.hypot(nn[i],nn[i+1],nn[i+2]);if(!(l>1e-4)){nn[i]=0;nn[i+1]=1;nn[i+2]=0;}}}
-    geo.translate(-cx,-y0,-cz);geo.scale(MODEL_U,MODEL_U*(opt.sy||1),MODEL_U);P.push([geo,opt.col!=null?opt.col:parseInt(g.c,16)]);}
+  for(const g of M.g){const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(g.p,3));if(g.n)geo.setAttribute('normal',new THREE.Float32BufferAttribute(g.n,3));else geo.computeVertexNormals();{const nn=geo.attributes.normal.array;for(let i=0;i<nn.length;i+=3){const l=Math.hypot(nn[i],nn[i+1],nn[i+2]);if(!(l>1e-4)){nn[i]=0;nn[i+1]=1;nn[i+2]=0;}}}
+    geo.translate(-cx,-y0,-cz);geo.scale(MODEL_U,MODEL_U*(opt.sy||1),MODEL_U);if(opt.ry)geo.rotateY(opt.ry);P.push([geo,opt.col!=null?opt.col:opt.map&&opt.map[g.c]!=null?opt.map[g.c]:parseInt(g.c,16)]);}
   const m=mergeG(P,true);for(const[gg]of P)gg.dispose();_mg[key]=m;return m.clone();}
 const modelH=k=>{const M=window.MODELPACK&&window.MODELPACK[k];return M?(M.b[4]-M.b[1])*MODEL_U:0;};
 function worldUV(g,k){const p=g.attributes.position,u=g.attributes.uv;if(!u)return;for(let i=0;i<p.count;i++)u.setXY(i,p.getX(i)*k,p.getZ(i)*k);u.needsUpdate=true;}
