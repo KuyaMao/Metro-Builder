@@ -2600,6 +2600,55 @@ for(const o of peds){const L=o.L,kind=o.kind;
   o.cols=k;
 }
 for(const k in PM)if(PM[k])PM[k].instanceColor.needsUpdate=true;
+// model people (Quaternius Ultimate Modular Men/Women, CC0): one instanced mesh per character, posed on the GPU from the walk rig's joint angles
+const PPL=(()=>{const P=window.PEOPLEPACK;if(!P)return null;
+  const dec=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+  const HDR=`attribute vec4 pSeg;attribute vec4 pJ0,pJ1,pJ2,pJ3;attribute vec4 pC0,pC1,pC2;
+uniform vec3 uHip,uKnee,uAnk,uSh,uEl;uniform float uTy;
+mat4 rX(float a){float c=cos(a),s=sin(a);return mat4(1.,0.,0.,0.,0.,c,s,0.,0.,-s,c,0.,0.,0.,0.,1.);}
+mat4 rY(float a){float c=cos(a),s=sin(a);return mat4(c,0.,-s,0.,0.,1.,0.,0.,s,0.,c,0.,0.,0.,0.,1.);}
+mat4 rZ(float a){float c=cos(a),s=sin(a);return mat4(c,s,0.,0.,-s,c,0.,0.,0.,0.,1.,0.,0.,0.,0.,1.);}
+mat4 piv(vec3 p,mat4 r){mat4 t=mat4(1.);t[3]=vec4(p,1.);mat4 u=mat4(1.);u[3]=vec4(-p,1.);return t*r*u;}
+mat4 pSegM(float s){mat4 P=rY(-pJ3.x*.5);if(s<.5)return P;mat4 U=piv(vec3(0.,uTy,0.),rX(pJ2.w)*rY(pJ3.x)*rZ(pJ3.y));if(s<1.5)return U;
+  if(s<7.5){bool L=s<4.5;float sd=L?1.:-1.,sl=L?s-2.:s-5.;vec3 h=vec3(uHip.x*sd,uHip.yz),k=vec3(uKnee.x*sd,uKnee.yz),a=vec3(uAnk.x*sd,uAnk.yz);
+    mat4 m=P*piv(h,rX(L?pJ0.x:pJ0.w));if(sl>.5)m=m*piv(k,rX(L?pJ0.y:pJ1.x));if(sl>1.5)m=m*piv(a,rX(L?pJ0.z:pJ1.y));return m;}
+  bool L=s<9.5;float sd=L?1.:-1.;vec3 sh=vec3(uSh.x*sd,uSh.yz),el=vec3(uEl.x*sd,uEl.yz);
+  mat4 m=U*piv(sh,rX(L?pJ1.z:pJ2.x)*rZ(pJ2.z*sd));if(s-(L?8.:10.)>.5)m=m*piv(el,rX(L?pJ1.w:pJ2.y));return m;}
+`;
+  const POS='mat4 pMA=pSegM(pSeg.x),pMB=pSegM(pSeg.y);vec3 transformed=(pMA*vec4(position,1.)).xyz*pSeg.z+(pMB*vec4(position,1.)).xyz*(1.-pSeg.z);';
+  const ch={},ids=Object.keys(P.c);
+  for(const id of ids){const c=P.c[id],vb=dec(c.v),dv=new DataView(vb.buffer),n=c.n,idx=new Uint16Array(dec(c.i).buffer),J=P.J[id[0]];
+    const pos=new Float32Array(n*3),nor=new Float32Array(n*3),col=new Float32Array(n*3),seg=new Float32Array(n*4);
+    for(let i=0;i<n;i++){const o=i*14;for(let k=0;k<3;k++){pos[i*3+k]=c.mn[k]+(dv.getInt16(o+k*2,true)+32768)/65535*(c.mx[k]-c.mn[k]);nor[i*3+k]=dv.getInt8(o+6+k)/127;}
+      const pl=c.pal[vb[o+9]];col[i*3]=pl[0];col[i*3+1]=pl[1];col[i*3+2]=pl[2];seg[i*4]=vb[o+10];seg[i*4+1]=vb[o+11];seg[i*4+2]=vb[o+12]/255;seg[i*4+3]=pl[3];}
+    const g=new THREE.BufferGeometry();g.setIndex(new THREE.BufferAttribute(idx,1));g.setAttribute('position',new THREE.BufferAttribute(pos,3));g.setAttribute('normal',new THREE.BufferAttribute(nor,3));
+    g.setAttribute('color',new THREE.BufferAttribute(col,3));g.setAttribute('pSeg',new THREE.BufferAttribute(seg,4));
+    const U={uHip:{value:new THREE.Vector3(...J.hip)},uKnee:{value:new THREE.Vector3(...J.knee)},uAnk:{value:new THREE.Vector3(...J.ank)},uSh:{value:new THREE.Vector3(...J.sh)},uEl:{value:new THREE.Vector3(...J.el)},uTy:{value:J.ty}};
+    const mat=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.72,metalness:0});
+    mat.onBeforeCompile=sh=>{Object.assign(sh.uniforms,U);sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\n'+HDR)
+      .replace('#include <beginnormal_vertex>','vec3 objectNormal;{mat4 a=pSegM(pSeg.x),b=pSegM(pSeg.y);objectNormal=normalize(mat3(a)*normal*pSeg.z+mat3(b)*normal*(1.-pSeg.z));}')
+      .replace('#include <begin_vertex>',POS).replace('#include <color_vertex>','#include <color_vertex>\n{float k=pSeg.w;vec3 sk=pC0.rgb;vColor.rgb=k<.5?color:k<1.5?sk:k<2.5?vec3(pC0.a,pC1.rg):k<3.5?vec3(pC1.ba,pC2.r):k<4.5?pC2.gba:sk*.82;}');};
+    mat.customProgramCacheKey=()=>'ppl';
+    const dmat=new THREE.MeshDepthMaterial({depthPacking:THREE.RGBADepthPacking});
+    dmat.onBeforeCompile=sh=>{Object.assign(sh.uniforms,U);sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\n'+HDR).replace('#include <begin_vertex>',POS);};dmat.customProgramCacheKey=()=>'ppld';
+    ch[id]={g,mat,dmat,J,dy:J.hip[1]-.061,n:0,cnt:0};}
+  return{ch,ids};})();
+if(PPL){const W=['wCasual','wCasual','wFormal','wSuit','wWorker','wPunk'],MN=['mCasual','mCasual','mCasual2','mCasual2','mBeach','mSuit','mSuit','mWorker','mFarmer','mPunk'];
+  const SUITC=[0x1c1c1c,0x263238,0x37474f,0x1a237e,0x3e2723,0x546e7a,0x4e342e],VIS=[0xff8f00,0xf9d71c,0xc6ff00,0xff6d00],C=c=>new THREE.Color(c).convertSRGBToLinear();
+  for(const o of peds){const L=o.L;let id;
+    if(o.kind==='jog')id=L.female?pick(['wCasual','wPunk']):pick(['mBeach','mCasual','mCasual2']);
+    else if(o.kind==='bike'||o.kind==='scoot')id=L.female?pick(['wCasual','wCasual','wSuit','wPunk']):pick(['mCasual','mCasual2','mSuit','mCasual','mPunk','mWorker']);
+    else if(L.kid)id=L.female?'wCasual':pick(['mCasual','mCasual2','mBeach']);
+    else if(L.old)id=L.female?pick(['wFormal','wCasual','wSuit']):pick(['mFarmer','mSuit','mCasual']);
+    else id=pick(L.female?W:MN);
+    if(!PPL.ch[id])continue;o.pc=id;PPL.ch[id].n++;
+    const top=id.endsWith('Suit')?pick(SUITC):id.endsWith('Worker')?pick(VIS):L.shirt,bot=id.endsWith('Suit')||id==='wFormal'?top:L.pants;
+    o.mc=[C(L.skin),C(L.hair),C(top),C(bot)];}
+  for(const id of PPL.ids){const c=PPL.ch[id];if(!c.n){c.m=null;continue;}
+    const cap=c.n,ang=new Float32Array(cap*16),cb=new Float32Array(cap*12),ib=new THREE.InstancedInterleavedBuffer(ang,16),cbb=new THREE.InstancedInterleavedBuffer(cb,12);ib.setUsage(THREE.DynamicDrawUsage);cbb.setUsage(THREE.DynamicDrawUsage);
+    ['pJ0','pJ1','pJ2','pJ3'].forEach((k,i)=>c.g.setAttribute(k,new THREE.InterleavedBufferAttribute(ib,4,i*4)));['pC0','pC1','pC2'].forEach((k,i)=>c.g.setAttribute(k,new THREE.InterleavedBufferAttribute(cbb,4,i*4)));
+    const m=new THREE.InstancedMesh(c.g,c.mat,cap);m.customDepthMaterial=c.dmat;m.castShadow=true;m.receiveShadow=true;m.frustumCulled=false;m.count=0;m.visible=false;scene.add(m);
+    Object.assign(c,{m,ang,cb,ib,cbb,cid:new Int32Array(cap).fill(-1)});}}
 // skeleton maths (reused objects, no per-frame allocation)
 const _M=new THREE.Matrix4(),_U=new THREE.Matrix4(),_L=new THREE.Matrix4(),_A=new THREE.Matrix4(),_B=new THREE.Matrix4(),_E=new THREE.Euler(),_H=new THREE.Matrix4();
 function local(x,y,z,rx,ry,rz){_E.set(rx,ry||0,rz||0);_L.makeRotationFromEuler(_E);_L.setPosition(x,y,z);return _L;}
@@ -2727,7 +2776,7 @@ function xgMove(o,dt){const x=o.xg,t=x.t;if(!t.road||(!x.door&&!t.xw&&!t.xo)){o.
 const pcnt={},_PV=new THREE.Matrix4(),_FR=new THREE.Frustum(),_PV3=new THREE.Vector3();
 function put(k,m,o){const s=(pcnt[k]=(pcnt[k]||0)+1)-1;PM[k].setMatrixAt(s,m);PM[k].setColorAt(s,o.cols[k]);}
 function updatePeople(dt,rdt){
-  pedFrame++;for(const k in pcnt)pcnt[k]=0;let li=0;xwBusy.clear();doorT-=rdt;if(doorT<=0){doorT=2.5;refreshDoors();}
+  pedFrame++;for(const k in pcnt)pcnt[k]=0;if(PPL)for(const id of PPL.ids)PPL.ch[id].cnt=0;let li=0;xwBusy.clear();doorT-=rdt;if(doorT<=0){doorT=2.5;refreshDoors();}
   const roads=roadsCache,want=pedRoads.length?Math.min(PEDMAX,24+Math.floor(stats.pop/10)):0;
   const cp=camera.position,farHide=Math.max(48,cam.dist*1.6);let vIdx=0;_PV.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse);_FR.setFromProjectionMatrix(_PV);
   const seen=(x,y,z)=>Math.hypot(x-cp.x,z-cp.z)<farHide&&_FR.containsPoint(_PV3.set(x,y+.05,z));
@@ -2783,7 +2832,7 @@ function updatePeople(dt,rdt){
     const d=Math.hypot(px-cp.x,yBase-cp.y,pz-cp.z);
     if(d>farHide){o.shown=false;continue;}
     o.shown=true;
-    const L=o.L,i=li++,ph=o.phase,mv=o.mv,s=Math.sin(ph),c=Math.cos(ph);
+    const L=o.L,i=o.pc?o.i+500:li++,ph=o.phase,mv=o.mv,s=Math.sin(ph),c=Math.cos(ph);
     let bob=0,lean=0,roll=0,twist=0,tL,tR,kL,kR,fL,fR,aL,aR,eL,eR,pony=.35;
     if(pose==='walk'){
       const A=.4*mv,cL=Math.max(0,Math.cos(ph+.3)),cR=Math.max(0,Math.cos(ph+.3+Math.PI));
@@ -2801,6 +2850,13 @@ function updatePeople(dt,rdt){
     }else if(o.kind==='bike'){
       tL=-1.12+.34*s;tR=-1.12-.34*s;kL=1.32-.42*s;kR=1.32+.42*s;fL=-.2+.15*c;fR=-.2-.15*c;aL=aR=-.78;eL=eR=-.55;lean=-.36;pony=.9;
     }else{const w=Math.sin(performance.now()/900+i);tL=.05;tR=-.2;kL=.04;kR=.28;fL=-.05;fR=-.05;aL=aR=-.95+.03*w;eL=eR=-.18;lean=-.05;roll=.025*w;pony=.8;}
+    const ab=pose==='jog'?.16:pose==='sit'?.14:.11;
+    if(o.pc){const C=PPL.ch[o.pc],k=C.cnt++,j=k*16,A=C.ang,seat=pose==='sit'||o.kind==='bike';
+      dummy.position.set(px,yBase+bob*L.scale-(seat?C.dy*L.scale:0),pz);dummy.rotation.set(0,o.yaw,0);dummy.scale.setScalar(L.scale);dummy.updateMatrix();C.m.setMatrixAt(k,dummy.matrix);_M.copy(dummy.matrix);
+      A[j]=tL;A[j+1]=kL;A[j+2]=fL;A[j+3]=tR;A[j+4]=kR;A[j+5]=fR;A[j+6]=aL;A[j+7]=eL;A[j+8]=aR;A[j+9]=eR;A[j+10]=ab-.08;A[j+11]=lean;A[j+12]=twist;A[j+13]=roll;
+      if(C.cid[k]!==o.i){C.cid[k]=o.i;const q=k*12;for(let n=0;n<4;n++){const c=o.mc[n];C.cb[q+n*3]=c.r;C.cb[q+n*3+1]=c.g;C.cb[q+n*3+2]=c.b;}C.cbb.needsUpdate=true;}
+      if(L.umb){_U.multiplyMatrices(_M,local(0,.061,0,lean,twist,roll));_U.multiply(local(0,-.061,0,0));put('umb',_U,o);}
+    }else{
     dummy.position.set(px,yBase+bob*L.scale,pz);dummy.rotation.set(0,o.yaw,0);dummy.scale.setScalar(L.scale);dummy.updateMatrix();_M.copy(dummy.matrix);
     _U.multiplyMatrices(_M,local(0,.061,0,lean,twist,roll));_U.multiply(local(0,-.061,0,0));
     put(o.torso,_U,o);PM.head.setMatrixAt(i,_U);PM.head.setColorAt(i,o.cols.head);put(L.style,_U,o);for(const a of L.acc)put(a,_U,o);if(L.bag)put(L.bag,_U,o);
@@ -2808,12 +2864,14 @@ function updatePeople(dt,rdt){
     if(L.style==='hPony'){_A.multiplyMatrices(_U,local(0,.1245,-.0125,pony,0,.08*Math.sin(ph)));put('ponyTail',_A,o);}
     _H.multiplyMatrices(_M,local(0,0,0,0,-twist*.5,0));PM.pelvis.setMatrixAt(i,_H);PM.pelvis.setColorAt(i,o.cols.pelvis);if(L.skirt)put('skirt',_H,o);
     chain(PM.thigh,PM.shin,PM.shoe,i*2,_H,.0086,.061,0,0,tL,kL,fL,.029);chain(PM.thigh,PM.shin,PM.shoe,i*2+1,_H,-.0086,.061,0,0,tR,kR,fR,.029);
-    const sx=o.torso==='torsoF'?.0196:.0214,ab=pose==='jog'?.16:pose==='sit'?.14:.11;chain(PM.uarm,PM.farm,null,i*2,_U,sx,.1032,0,ab,aL,eL,0,.027);chain(PM.uarm,PM.farm,null,i*2+1,_U,-sx,.1032,0,-ab,aR,eR,0,.027);
+    const sx=o.torso==='torsoF'?.0196:.0214;chain(PM.uarm,PM.farm,null,i*2,_U,sx,.1032,0,ab,aL,eL,0,.027);chain(PM.uarm,PM.farm,null,i*2+1,_U,-sx,.1032,0,-ab,aR,eR,0,.027);
+    }
     if(o.kind==='bike'){dummy.scale.setScalar(L.scale);dummy.position.y=yBase;dummy.updateMatrix();put('bike',dummy.matrix,o);_A.multiplyMatrices(dummy.matrix,local(0,.024,0,ph));put('crank',_A,o);}
     if(o.kind==='scoot'){dummy.scale.setScalar(L.scale);dummy.position.y=yBase-.0135*L.scale;dummy.updateMatrix();put('scooter',dummy.matrix,o);}
     if(L.dog){const side=o.off>0?-1:1,dp=ph*1.6;_A.multiplyMatrices(_M,local(side*.046/L.scale,Math.abs(Math.sin(dp))*.0016*mv,.026/L.scale,0,.08*Math.sin(dp*.5),0));_L.makeScale(1/L.scale,1/L.scale,1/L.scale);_A.multiply(_L);put('dog',_A,o);}
   }
   for(const k in PM){const m=PM[k];if(!m)continue;m.count=(k==='head'||k==='pelvis')?li:doubled[k]?li*2:(pcnt[k]||0);m.instanceMatrix.needsUpdate=true;if(m.instanceColor)m.instanceColor.needsUpdate=true;}
+  if(PPL)for(const id of PPL.ids){const c=PPL.ch[id];if(!c.m)continue;c.m.count=c.cnt;c.m.visible=c.cnt>0;if(c.cnt){c.m.instanceMatrix.needsUpdate=true;c.ib.needsUpdate=true;}}
   if(follow&&follow.L){if(!follow.shown)follow=null;else{cam.tx+=(follow.pos.x-cam.tx)*Math.min(1,rdt*8);cam.tz+=(follow.pos.z-cam.tz)*Math.min(1,rdt*8);}}
 }
 // adaptive quality: keep frame rate smooth on slower phones
