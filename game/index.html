@@ -1993,19 +1993,31 @@ const glassOMat=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.04,
 const headMat=new THREE.MeshBasicMaterial({vertexColors:true});
 const tailMat=new THREE.MeshBasicMaterial({vertexColors:true});
 envUsers.push(paintMat,chromeMat,glassMat,glassOMat);for(const k of['res','glass','ind']){WALL[k].envMap=envMap;WALL[k].envMapIntensity=k==='glass'?.9:.6;envUsers.push(WALL[k]);}
+// model cars are flat-shaded low-poly: softer paint and glass so big flat panels don't mirror the sky
+const MATS_M={paint:new THREE.MeshPhysicalMaterial({vertexColors:true,roughness:.42,metalness:.3,clearcoat:.35,clearcoatRoughness:.2,envMap,envMapIntensity:.4}),glass:new THREE.MeshStandardMaterial({vertexColors:true,color:0x2a3138,roughness:.12,metalness:.6,envMap,envMapIntensity:.8})};
 const MATS={paint:paintMat,det:detMat,chrome:chromeMat,glass:glassMat,glassO:glassOMat,head:headMat,tail:tailMat};
 // people at true size: the figure is modelled ~0.13 units tall, a 1.7 m adult is 0.068
 const PEDK=.53;
+// CC0 car models (Cosmo, Rgsdev) split by material class; the procedural car is the fallback if the pack is missing
+function mcarP(k,fb){const M=window.MODELPACK&&MODELPACK[k];if(!M)return fb();const P=newP(),b=M.b,cx=(b[0]+b[3])/2,cz=(b[2]+b[5])/2,y0=b[1];
+  for(const g of M.g){const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(g.p,3));geo.computeVertexNormals();geo.translate(-cx,-y0,-cz);geo.scale(MODEL_U,MODEL_U,MODEL_U);(P[g.k]||P.det).push([geo,parseInt(g.c,16)]);}
+  return P;}
+const mcarO=(k,fb)=>{const M=window.MODELPACK&&MODELPACK[k];if(!M)return fb;const b=M.b;return{L:(b[5]-b[2])*MODEL_U,lightY:(b[4]-b[1])*MODEL_U*.42,model:true};};
+const HASCARS=!!(window.MODELPACK&&MODELPACK.c_sedan);
 const VTYPES=[
-  {id:'pickup',n:12,sp:1.15,P:passenger(PICKUP),o:PICKUP,cols:[0xf2f2f2,0x8a1c1c,0x2b2f33,0x9aa3ab,0x1d3f6e,0x6e5a3a]},
-  {id:'MPV',n:10,sp:1.15,P:passenger(MPV),o:MPV,cols:[0xf2f2f2,0x9aa3ab,0x1c1c1e,0x6b0f1a,0x3c5a7a]},
-  {id:'coupe',n:5,sp:1.45,P:passenger(COUPE),o:COUPE,cols:[0xd10f0f,0xf2c200,0x0f4c9c,0x111111,0xf2f2f2]},
-  {id:'sedan',n:20,sp:1.25,P:passenger(SEDAN),o:SEDAN,cols:[0xb3141d,0xf2f2f2,0x1f3a5f,0x232326,0x9aa3ab,0x5c0f1b,0x2f5f52,0xcfc6b4,0x6b7177]},
-  {id:'hatch',n:12,sp:1.3,P:passenger(HATCH),o:HATCH,cols:[0xe0611a,0x2d7fc1,0xe8c21c,0xf0f0f0,0x6a2f8a,0x13806b,0x2b3a4a,0xa61b29]},
-  {id:'suv',n:12,sp:1.15,P:passenger(SUV),o:SUV,cols:[0x161616,0xf2f2f2,0x4d5966,0x5a2a0c,0x17406a,0x3d4d1f,0x8a8f94]},
-  {id:'taxi',n:6,sp:1.25,P:passenger(TAXI),o:SEDAN,cols:[0xf2c200,0xf2f2f2]},
+  {id:'pickup',n:12,sp:1.15,P:mcarP('r_pickup',()=>passenger(PICKUP)),o:mcarO('r_pickup',PICKUP),cols:[0xf2f2f2,0x8a1c1c,0x2b2f33,0x9aa3ab,0x1d3f6e,0x6e5a3a]},
+  {id:'MPV',n:10,sp:1.15,P:mcarP('c_van',()=>passenger(MPV)),o:mcarO('c_van',MPV),cols:[0xf2f2f2,0x9aa3ab,0x1c1c1e,0x6b0f1a,0x3c5a7a]},
+  {id:'coupe',n:5,sp:1.45,P:mcarP('c_coupe',()=>passenger(COUPE)),o:mcarO('c_coupe',COUPE),cols:[0xd10f0f,0xf2c200,0x0f4c9c,0x111111,0xf2f2f2]},
+  {id:'sedan',n:20,sp:1.25,P:mcarP('c_sedan',()=>passenger(SEDAN)),o:mcarO('c_sedan',SEDAN),cols:[0xb3141d,0xf2f2f2,0x1f3a5f,0x232326,0x9aa3ab,0x5c0f1b,0x2f5f52,0xcfc6b4,0x6b7177]},
+  {id:'hatch',n:12,sp:1.3,P:mcarP('c_hatch',()=>passenger(HATCH)),o:mcarO('c_hatch',HATCH),cols:[0xe0611a,0x2d7fc1,0xe8c21c,0xf0f0f0,0x6a2f8a,0x13806b,0x2b3a4a,0xa61b29]},
+  {id:'suv',n:12,sp:1.15,P:mcarP('c_suv',()=>passenger(SUV)),o:mcarO('c_suv',SUV),cols:[0x161616,0xf2f2f2,0x4d5966,0x5a2a0c,0x17406a,0x3d4d1f,0x8a8f94]},
+  {id:'taxi',n:6,sp:1.25,P:mcarP('c_sedan',()=>passenger(TAXI)),o:mcarO('c_sedan',SEDAN),cols:[0xf2c200,0xf2f2f2]},
+  ...(HASCARS?[{id:'jeep',n:5,sp:1.1,P:mcarP('c_jeep',()=>passenger(SUV)),o:mcarO('c_jeep',SUV),cols:[0x2e7d32,0x8d6e63,0x1c1c1e,0xf2f2f2,0xc62828]},
+    {id:'police',n:3,sp:1.3,P:mcarP('c_police',()=>passenger(SEDAN)),o:mcarO('c_police',SEDAN),cols:[0xffffff]},
+    {id:'ambulance',n:2,sp:1.2,P:mcarP('r_ambulance',()=>passenger(MPV)),o:mcarO('r_ambulance',MPV),cols:[0xffffff]},
+    {id:'firetruck',n:1,sp:1.0,P:mcarP('r_firetruck',()=>truck()),o:mcarO('r_firetruck',{L:.6,lightY:.085}),cols:[0xffffff]}]:[]),
   {id:'jeepney',n:12,sp:1.05,P:jeepney(),o:{L:.506,lightY:.073},cols:[0xd8dadc,0xc62828,0x1565c0,0x2e7d32,0xf9a825,0x6a1b9a]},
-  {id:'bus',n:5,sp:.95,P:bus(),o:{L:.818,lightY:.083},cols:[0x1e88e5,0xd32f2f,0x2a9d8f,0xf2c14e]},
+  {id:'bus',n:5,sp:.95,P:mcarP('r_bus',()=>bus()),o:mcarO('r_bus',{L:.818,lightY:.083}),cols:HASCARS?[0xffffff]:[0x1e88e5,0xd32f2f,0x2a9d8f,0xf2c14e]},
   {id:'truck',n:8,sp:1.0,P:truck(),o:{L:.6,lightY:.085},cols:[0xb71c1c,0x1f3a5f,0xf2f2f2,0x1b7f3b,0xe67e22]},
   {id:'motorcycle',n:16,sp:1.35,P:moto(false),o:{L:.23,lightY:.093,fx:.25},cols:[0xc62828,0x111111,0x1565c0,0xf2f2f2,0xf9a825,0x2e7d32,0x6d6f73]},
   {id:'tricycle',n:10,sp:.9,P:moto(true),o:{L:.25,lightY:.093,fx:.3},cols:[0x1565c0,0xc62828,0x2e7d32,0xf9a825,0x6a1b9a,0xe0e0e0]},
@@ -2014,9 +2026,9 @@ const cars=[],TB_MAX=16;
 // realistic proportions: motorbikes ≈ 2 m, cars 4–5.3 m, jeepneys 7 m, trucks 8.5 m, buses 12 m (all a little wider-than-life for readability)
 const VSCALE={sedan:[.87,1],taxi:[.87,1],hatch:[.87,.97],coupe:[.86,.98],suv:[.86,.95],MPV:[.87,.9],pickup:[.86,.97],jeepney:[.9,1],bus:[.9,1],truck:[.9,1],motorcycle:[.64,.64],tricycle:[.72,.72]};
 // real-world lengths in metres (1 unit = 25 m): every vehicle is scaled to its true size
-const VREAL={pickup:5.3,MPV:4.8,coupe:4.5,sedan:4.8,hatch:4.0,suv:4.8,taxi:4.8,jeepney:7.2,bus:12,truck:9,motorcycle:2.0,tricycle:2.7};
-for(const v of VTYPES){let[ssx,ssl]=VSCALE[v.id]||[1,1];if(VREAL[v.id]){const f=VREAL[v.id]/25/(v.o.L*ssl);ssx*=f;ssl*=f;}scaleP(v.P,ssx,ssl,ssl);v.L=v.o.L*ssl;v.ly=v.o.lightY*ssl;v.fxs=(v.o.fx||(v.id==='bus'||v.id==='truck'?1.2:1))*ssx;v.meshes=[];
-  for(const k in MATS){if(!v.P[k].length)continue;const m=new THREE.InstancedMesh(mergeG(v.P[k]),MATS[k],v.n+(v.id==='bus'?TB_MAX:0));m.castShadow=(k==='paint'||k==='det');m.frustumCulled=false;scene.add(m);v.meshes.push(m);v[k]=m;}
+const VREAL={pickup:5.3,MPV:4.9,coupe:4.7,sedan:4.8,hatch:4.0,suv:4.8,taxi:4.8,jeep:4.3,police:4.9,ambulance:6.0,firetruck:9.5,jeepney:7.2,bus:12,truck:9,motorcycle:2.0,tricycle:2.7};
+for(const v of VTYPES){let[ssx,ssl]=v.o.model?(v.id==='bus'?[.7,1]:[.92,1]):VSCALE[v.id]||[1,1];if(VREAL[v.id]){const f=VREAL[v.id]/25/(v.o.L*ssl);ssx*=f;ssl*=f;}scaleP(v.P,ssx,ssl,ssl);v.L=v.o.L*ssl;v.ly=v.o.lightY*ssl;v.fxs=(v.o.fx||(v.id==='bus'||v.id==='truck'?1.2:1))*ssx;v.meshes=[];
+  for(const k in MATS){if(!v.P[k].length)continue;const m=new THREE.InstancedMesh(mergeG(v.P[k]),v.o.model&&MATS_M[k]?MATS_M[k]:MATS[k],v.n+(v.id==='bus'?TB_MAX:0));m.castShadow=(k==='paint'||k==='det');m.frustumCulled=false;scene.add(m);v.meshes.push(m);v[k]=m;}
   for(let i=0;i<v.n;i++){v.paint.setColorAt(i,new THREE.Color(v.cols[i%v.cols.length]));if(v.tail)v.tail.setColorAt(i,new THREE.Color(1,1,1));
     cars.push({v,i,col:new THREE.Color(v.cols[i%v.cols.length]),prev:null,a:null,b:null,p:0,sp:v.sp*rnd(.85,1.15),pos:new THREE.Vector3(),yaw:0,brake:false});}
 }
