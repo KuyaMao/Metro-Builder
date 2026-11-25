@@ -78,7 +78,7 @@ for spec in a[1:]:
             if t[4]=='head':t[4]='det'
     # front = side with headlights
     hz=[sum(p[2] for p in t[2])/3 for t in tris if t[4]=='head'];tz=[sum(p[2] for p in t[2])/3 for t in tris if t[4]=='tail']
-    flip=bool(hz and tz and sum(hz)/len(hz)<sum(tz)/len(tz)) or name.startswith('c_')
+    flip=bool(hz and tz and sum(hz)/len(hz)<sum(tz)/len(tz))
     Lz=max(abs(p[2]) for t in tris for p in t[2])
     for t in tris:
         if t[4]=='head':
