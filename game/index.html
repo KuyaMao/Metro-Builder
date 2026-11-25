@@ -1110,12 +1110,12 @@ const ICH_H=.13;
 // axes of an interchange junction: highway direction (hx,hz) and the crossing road's tiles; null if it does not fit
 function ichgInfo(J,check,compact){if(!J||!J.road||J.water||J.cv||!isJn(J))return null;const nb=roadNeighbors(J),H=nb.filter(n=>n.rt==='h'),X=nb.filter(n=>n.rt!=='h');
   if(H.length!==2||H[0].x+H[1].x!==2*J.x||H[0].z+H[1].z!==2*J.z||!X.length||X.some(n=>n.water||n.cv))return null;const hx=Math.abs(H[0].x-J.x),hz=Math.abs(H[0].z-J.z);
-  const cp=compact!=null?compact:J.ixv==='c',corners=[];if(!cp)for(const m of ichgMoves(J,nb))if(m.loop)corners.push(m.corner);
+  const cp=compact!=null?compact:J.ixv==='c',corners=[];if(!cp){const sv=J.ixv;J.ixv=null;for(const m of ichgMoves(J,nb))if(m.corner&&!corners.includes(m.corner))corners.push(m.corner);J.ixv=sv;}
   if(check)for(const c of corners){if(!c||!owned(c)||c.road||c.b||c.ref!=null||c.rail||c.runway||c.water||c.cv||c.cvo||(c.icv&&c.icv!==key(J)))return null;}
   return{hx,hz,H,X,corners};}
 // every turning movement: entry neighbour, exit neighbour, whether it loops (left turn) and on which corner tile
 function ichgMoves(J,nb){const r=[];for(const p of nb)for(const b of nb){if(p===b)continue;const fx=J.x-p.x,fz=J.z-p.z,rx=-fz,rz=fx;
-  if(b.x===J.x+fx&&b.z===J.z+fz)continue;const right=b.x===J.x+rx&&b.z===J.z+rz,lp=!right&&J.ixv!=='c';r.push({p,b,loop:lp,corner:lp?T(J.x+fx+rx,J.z+fz+rz):null});}return r;}
+  if(b.x===J.x+fx&&b.z===J.z+fz)continue;const right=b.x===J.x+rx&&b.z===J.z+rz,cl=J.ixv!=='c',lp=!right&&cl;r.push({p,b,right,loop:lp,conn:right&&cl,corner:lp?T(J.x+fx+rx,J.z+fz+rz):right&&cl?T(J.x-fx+rx,J.z-fz+rz):null});}return r;}
 // ramp centre line for a movement, in the car's frame (f forward, r to the right), sampled with arc length
 const _ichC={};
 function ichgPoly(J,p,b,off){const fx=J.x-p.x,fz=J.z-p.z,rx=-fz,rz=fx,right=b.x===J.x+rx&&b.z===J.z+rz,o=Math.abs(off)||.1,cpt=J.ixv==='c',ck=key(J)+'|'+key(p)+'|'+key(b)+'|'+o.toFixed(3)+(cpt?'c':'');if(_ichC[ck])return _ichC[ck];
@@ -1125,7 +1125,23 @@ function ichgPoly(J,p,b,off){const fx=J.x-p.x,fz=J.z-p.z,rx=-fz,rz=fx,right=b.x=
     pts.push([.5*((2*b0[0])+(-a[0]+c[0])*t+(2*a[0]-5*b0[0]+4*c[0]-d[0])*t2+(-a[0]+3*b0[0]-3*c[0]+d[0])*t3),.5*((2*b0[1])+(-a[1]+c[1])*t+(2*a[1]-5*b0[1]+4*c[1]-d[1])*t2+(-a[1]+3*b0[1]-3*c[1]+d[1])*t3)]);}}
   pts.push(P[n-1]);const cx=wx(J.x),cz=wx(J.z),W=[],S=[0];for(const[f,r]of pts)W.push([cx+fx*f+rx*r,cz+fz*f+rz*r]);for(let i=1;i<W.length;i++)S.push(S[i-1]+Math.hypot(W[i][0]-W[i-1][0],W[i][1]-W[i-1][1]));
   const h0=p.rt==='h'?0:ICH_H,h1=b.rt==='h'?0:ICH_H;return _ichC[ck]={W,S,L:S[S.length-1],h0,h1,right};}
-let _ppH=null;
+let _ppH=null,_pcar=null;const _cnC={};
+function ichgConn(J,X,Y,off){const fx=J.x-X.x,fz=J.z-X.z,rx=-fz,rz=fx,o=Math.abs(off)||.1,ck=key(J)+'|'+key(X)+'|'+key(Y)+'|'+o.toFixed(3);if(_cnC[ck])return _cnC[ck];
+  const P=[[-1.5,o],[-1.25,o+.01],[-1.02,o+.12],[-.86,.62],[-.8,.95],[-.7,1.22],[-o-.1,1.42],[-o,1.5]],pts=[],n=P.length;
+  for(let i=0;i<n-1;i++){const a=P[Math.max(0,i-1)],b0=P[i],c=P[i+1],d=P[Math.min(n-1,i+2)];for(let k=0;k<8;k++){const t=k/8,t2=t*t,t3=t2*t;pts.push([.5*((2*b0[0])+(-a[0]+c[0])*t+(2*a[0]-5*b0[0]+4*c[0]-d[0])*t2+(-a[0]+3*b0[0]-3*c[0]+d[0])*t3),.5*((2*b0[1])+(-a[1]+c[1])*t+(2*a[1]-5*b0[1]+4*c[1]-d[1])*t2+(-a[1]+3*b0[1]-3*c[1]+d[1])*t3)]);}}
+  pts.push(P[n-1]);const cx=wx(J.x),cz=wx(J.z),W=[],S=[0];for(const[f,r]of pts)W.push([cx+fx*f+rx*r,cz+fz*f+rz*r]);for(let i=1;i<W.length;i++)S.push(S[i-1]+Math.hypot(W[i][0]-W[i-1][0],W[i][1]-W[i-1][1]));
+  return _cnC[ck]={W,S,L:S[S.length-1]};}
+const CONN_SPLIT=[0,.38,.74,1];
+function connAt(Q,u){const s=clamp(u,0,1)*Q.L;let i=1;while(i<Q.S.length-1&&Q.S[i]<s)i++;const f=(s-Q.S[i-1])/Math.max(1e-6,Q.S[i]-Q.S[i-1]),A=Q.W[i-1],B=Q.W[i];
+  _pp.x=A[0]+(B[0]-A[0])*f;_pp.z=A[1]+(B[1]-A[1])*f;const tx=B[0]-A[0],tz=B[1]-A[1],l=Math.hypot(tx,tz)||1;_pp.tx=tx/l;_pp.tz=tz/l;_ppH=0;return _pp;}
+const isClover=J=>J&&J.ix==='ichg'&&J.ixv!=='c'&&!!ichgInfo(J);
+const isRightOf=(J,X,Y)=>{const fx=J.x-X.x,fz=J.z-X.z;return Y.x===J.x-fz&&Y.z===J.z+fx;};
+// a car on its way through a cloverleaf right turn: which third of the connector it is on (entry tile, junction, exit tile)
+function connPath(c,p){const a=c.a;
+  if(c.x2J&&c.b===c.x2J&&c.x2&&isClover(c.b)&&isRightOf(c.b,a,c.x2)){const Q=ichgConn(c.b,a,c.x2,c.offC);c._cl=Q.L*(CONN_SPLIT[1]-CONN_SPLIT[0]);c._clA=a;return connAt(Q,CONN_SPLIT[0]+p*(CONN_SPLIT[1]-CONN_SPLIT[0]));}
+  if(isClover(a)&&c.prev&&c.b&&c.prev!==a&&isRightOf(a,c.prev,c.b)&&c._cnX===c.prev){const Q=ichgConn(a,c.prev,c.b,c.offC);c._cl=Q.L*(CONN_SPLIT[2]-CONN_SPLIT[1]);c._clA=a;return connAt(Q,CONN_SPLIT[1]+p*(CONN_SPLIT[2]-CONN_SPLIT[1]));}
+  if(c._cnJ&&c.prev===c._cnJ&&c._cnY===a&&isClover(c._cnJ)){const Q=ichgConn(c._cnJ,c._cnX,a,c.offC);c._cl=Q.L*(CONN_SPLIT[3]-CONN_SPLIT[2]);c._clA=a;return connAt(Q,CONN_SPLIT[2]+p*(CONN_SPLIT[3]-CONN_SPLIT[2]));}
+  return null;}
 function ichgPath(a,prev,b,p,off){const fx=a.x-prev.x,fz=a.z-prev.z,str=b.x===a.x+fx&&b.z===a.z+fz;
   if(str){_ppH=prev.rt==='h'?0:ICH_H;return null;}
   const Q=ichgPoly(a,prev,b,off),s=clamp(p,0,1)*Q.L;let i=1;while(i<Q.S.length-1&&Q.S[i]<s)i++;const f=(s-Q.S[i-1])/Math.max(1e-6,Q.S[i]-Q.S[i-1]),A=Q.W[i-1],B=Q.W[i];
@@ -1145,7 +1161,19 @@ function ichgParts(J,I,out){const X=wx(J.x),Z=wx(J.z),ew=I.hx===1,Xr=I.X[0],xg=r
   for(const v of[-.5,.5])for(const u of[-1,0,1])if(u||true)D(new THREE.CylinderGeometry(.018,.022,y-.05,10).translate(ew?X+u*W*.7:X+v*.98*.5,(y-.05)/2,ew?Z+v*.98*.5:Z+u*W*.7),0xb3ada3);
   if(Xr.rt==='s')q(-.009,.009,-.5,.5,y+.0012,RCOL.yel);else for(const sg of[-1,1])q(sg*.011-.0045,sg*.011+.0045,-.5,.5,y+.0012,RCOL.yel);
   // ramps
-  const nb=roadNeighbors(J);for(const m of ichgMoves(J,nb)){const Q=ichgPoly(J,m.p,m.b,(rtOf(m.p).lo[0]+rtOf(m.b).lo[0])/2),pos=[],w=.075;let pv=null;
+  const nb=roadNeighbors(J);for(const m of ichgMoves(J,nb)){
+    if(m.conn){// outer connector at ground level: asphalt ribbon with white edge lines
+      const Q=ichgConn(J,m.p,m.b,rtOf(m.p).lo[rtOf(m.p).lanes-1]),w=.07,pos=[],ln=[[],[]];let pv=null;
+      for(let i=0;i<Q.W.length;i++){const a=Q.W[i],b2=Q.W[Math.min(Q.W.length-1,i+1)],c0=Q.W[Math.max(0,i-1)],tx=b2[0]-c0[0],tz=b2[1]-c0[1],l=Math.hypot(tx,tz)||1,nx=-tz/l,nz=tx/l,u=Q.S[i]/Q.L;
+        const yy=.0192,cur=[a[0]+nx*w,a[1]+nz*w,a[0]-nx*w,a[1]-nz*w];if(u<.1){pv=null;continue;}
+        if(pv)pos.push(pv[0],yy,pv[1],pv[2],yy,pv[3],cur[2],yy,cur[3],pv[0],yy,pv[1],cur[2],yy,cur[3],cur[0],yy,cur[1]);pv=cur;}
+      const g=new THREE.BufferGeometry(),p=new Float32Array(pos),nr=new Float32Array(pos.length),uv=new Float32Array(pos.length/3*2);for(let i=0;i<pos.length/3;i++){nr[i*3+1]=1;uv[i*2]=p[i*3]*1.5;uv[i*2+1]=p[i*3+2]*1.5;}
+      for(let i=0;i<pos.length;i+=9){const ax=p[i+3]-p[i],az=p[i+5]-p[i+2],bx=p[i+6]-p[i],bz=p[i+8]-p[i+2];if(az*bx-ax*bz<0)for(let k=0;k<3;k++){const t=p[i+3+k];p[i+3+k]=p[i+6+k];p[i+6+k]=t;}}
+      g.setAttribute('position',new THREE.BufferAttribute(p,3));g.setAttribute('normal',new THREE.BufferAttribute(nr,3));g.setAttribute('uv',new THREE.BufferAttribute(uv,2));P(g,RCOL.hasp);
+      for(let i=2;i<Q.W.length;i++){const u=Q.S[i]/Q.L;if(u<.14||u>.97)continue;const a=Q.W[i-1],b2=Q.W[i],tx=b2[0]-a[0],tz=b2[1]-a[1],l=Math.hypot(tx,tz);if(l<1e-4)continue;const nx=-tz/l,nz=tx/l;
+        for(const sd of[-1,1])P(new THREE.BoxGeometry(.006,.0006,l+.002).rotateY(Math.atan2(tx,tz)).translate((a[0]+b2[0])/2+nx*(w-.008)*sd,.0198,(a[1]+b2[1])/2+nz*(w-.008)*sd),RCOL.wht);}
+      continue;}
+    const Q=ichgPoly(J,m.p,m.b,(rtOf(m.p).lo[0]+rtOf(m.b).lo[0])/2),pos=[],w=.075;let pv=null;
     for(let i=0;i<Q.W.length;i++){const a=Q.W[i],b=Q.W[Math.min(Q.W.length-1,i+1)],c0=Q.W[Math.max(0,i-1)],tx=b[0]-c0[0],tz=b[1]-c0[1],l=Math.hypot(tx,tz)||1,nx=-tz/l,nz=tx/l,k=sm(.1,.9,Q.S[i]/Q.L),hh=.0135+Q.h0+(Q.h1-Q.h0)*k,cur=[a[0]+nx*w,a[1]+nz*w,a[0]-nx*w,a[1]-nz*w,hh],inJ=Math.abs(a[0]-X)<.5&&Math.abs(a[1]-Z)<.5&&(hh<.03||hh>.012+ICH_H-.004);
       if(inJ){pv=null;continue;}
       if(pv)pos.push(pv[0],pv[4],pv[1],pv[2],pv[4],pv[3],cur[2],cur[4],cur[3],pv[0],pv[4],pv[1],cur[2],cur[4],cur[3],cur[0],cur[4],cur[1]);pv=cur;
@@ -1442,7 +1470,11 @@ function servParts(b){
     case 'train':{const n=Math.max(1,Math.min(4,terminalStats(b).plats));D(RB(2.96,.004,2.96,0,0,0),0xc9c3b6);
       W('res',2.4,FLOOR*3,.6,0,0,-1.1,0xd8c6a5);D(RB(2.44,.04,.64,0,FLOOR*3,-1.1),0x7a3b2e);for(let i=0;i<5;i++)D(new THREE.CylinderGeometry(.1,.1,.02,16,1,false,0,Math.PI).rotateX(Math.PI/2).translate(-.9+i*.45,FLOOR*2.2,-.79),0x3a4650);
       W('res',.4,FLOOR*7,.4,1.05,0,-1.1,0xcbb894);D(RB(.44,.05,.44,1.05,FLOOR*7,-1.1),0x7a3b2e);D(new THREE.ConeGeometry(.3,.3,4).rotateY(Math.PI/4).translate(1.05,FLOOR*7+.2,-1.1),0x5a5f66);L(new THREE.CylinderGeometry(.11,.11,.02,20).rotateX(Math.PI/2).translate(1.05,FLOOR*5.6,-.89),0xfff8e1);
-      GL(new THREE.CylinderGeometry(1.0,1.0,2.6,28,1,true,-Math.PI/2,Math.PI).rotateZ(Math.PI/2).scale(1,.42,1).translate(0,.22,.35),0x8fb3c8);for(let i=0;i<7;i++)D(new THREE.TorusGeometry(1.0,.012,4,28,Math.PI).rotateY(Math.PI/2).scale(1,.42,1).translate(-1.2+i*.4,.22,.35),0xdedede);
+      {const dep=(b.lv||1)>2,hl=dep?1.75:2.6,hx=dep?-.43:0;GL(new THREE.CylinderGeometry(1.0,1.0,hl,28,1,true,-Math.PI/2,Math.PI).rotateZ(Math.PI/2).scale(1,.42,1).translate(hx,.22,.35),0x8fb3c8);for(let i=0;i<(dep?5:7);i++)D(new THREE.TorusGeometry(1.0,.012,4,28,Math.PI).rotateY(Math.PI/2).scale(1,.42,1).translate(hx-hl/2+.1+i*.4,.22,.35),0xdedede);
+        // level 3: the far end of the tracks runs into a maintenance depot shed with roller doors and inspection pits
+        if(dep){const x0=.5,x1=1.44,cx=(x0+x1)/2,w=x1-x0;D(RB(w,.3,1.7,cx,0,.42),0xb0bec5);D(new THREE.CylinderGeometry(.85,.85,w,20,1,false,-Math.PI/2,Math.PI).rotateZ(Math.PI/2).scale(1,.18,1).translate(cx,.3,.42),0x78909c);
+          for(let i=0;i<4;i++){const z=-.35+i*.32;D(RB(.004,.2,.16,x0-.002,.004,z),0x455a64);L(RB(.004,.02,.12,x0-.004,.21,z),0xffd23f);}
+          for(let i=0;i<5;i++)L(RB(.18,.006,.05,cx,.481,-.25+i*.33),0xd6ecff);sign(.5,cx,.36,1.28,0xff8f00);}}
       // tracks at standard gauge; island platforms reach right up to the side of the cars (no gap)
       for(let i=0;i<4;i++){const z=-.35+i*.32;D(RB(2.7,.008,.15,0,.004,z),0x8a8276);for(let k=0;k<52;k++)D(RB(.012,.005,.104,-1.33+k*.052,.012,z),0x6b4a2f);for(const s of[-1,1])D(RB(2.7,.007,.004,0,.017,z+s*.0287),0x9aa0a6);}
       for(let i=0;i<3;i++){const z=-.19+i*.32;D(RB(2.6,.045,.19,0,0,z),0xd9d4c8);for(const s of[-1,1])D(RB(2.6,.002,.01,0,.045,z+s*.09),0xffd23f);}
@@ -1452,7 +1484,7 @@ function servParts(b){
       // terminal: glass hall under a wave roof across the lot, control tower at the landside corner, car park behind
       GL(RB(tw,.36,.9,0,0,tz),0x6f9bb8);D(new THREE.CylinderGeometry(1.0,1.0,tw+.1,28,1,true,-Math.PI/2,Math.PI).rotateZ(Math.PI/2).scale(1,.16,.5).translate(0,.36,tz),0xeeeeee);
       const nc=Math.max(4,Math.round(tw/.28));for(let i=0;i<=nc;i++)D(RB(.02,.36,.02,-tw/2+.05+i*(tw-.1)/nc,0,tz+.45),0xdedede);sign(.9,0,.42,tz+.46,0x4fb3ff);
-      const tx=HW-.25,tzz=-HD+.3;D(CY(.07,.09,1.4,tx,0,tzz,14),0xe0e0e0);GL(new THREE.CylinderGeometry(.2,.16,.16,14).translate(tx,1.48,tzz),0x6f9bb8);D(CY(.21,.21,.03,tx,1.56,tzz,14),0x5a5f66);L(new THREE.SphereGeometry(.02,6,4).translate(tx,1.62,tzz),0xff2a2a);
+      const tx=HW-.25,tzz=-HD+.3;if((b.lv||1)<3){D(CY(.07,.09,1.4,tx,0,tzz,14),0xe0e0e0);GL(new THREE.CylinderGeometry(.2,.16,.16,14).translate(tx,1.48,tzz),0x6f9bb8);D(CY(.21,.21,.03,tx,1.56,tzz,14),0x5a5f66);L(new THREE.SphereGeometry(.02,6,4).translate(tx,1.62,tzz),0xff2a2a);}
       // gates: jet bridge, yellow lead-in line from the taxi lane, stop bar, safety box
       for(const x of gx){D(RB(.12,.1,.42,x-.12,.13,-.28+dz),0xb0b6bb);D(RB(.13,.006,.13,x-.12,.13,-.06+dz),0x8a9096);D(CY(.025,.025,.13,x-.12,0,-.1+dz,8),0x6d6f73);
         const l0=.1+dz;D(RB(.02,.0065,HD-.05-l0,x,.0005,(HD-.05+l0)/2),0xffd23f);D(RB(.3,.0065,.025,x,.0005,.12+dz),0xffd23f);
@@ -1526,6 +1558,11 @@ function servParts(b){
         D(RB(.36,.04,.04,cx,.38,q-.4),red);D(RB(.36,.04,.04,cx,.38,q-.05),red);for(const lx of[-.16,.16])D(RB(.035,.05,1.5,cx+lx,.8,q+.25),wt);D(RB(.36,.08,.16,cx,.84,q-.45),wt);D(RB(.2,.1,.18,cx,.9,q-.5),red);
         D(RB(.14,.06,.1,cx,.7,q+.45),0x37474f);for(const lx of[-.04,.04])D(RB(.004,.3,.004,cx+lx,.4,q+.45),0x222222);D(RB(.24,.03,.1,cx,.37,q+.45),0x1565c0);
         for(const lx of[-.16,.16])D(RB(.06,.02,.06,cx+lx,0,q-.4),0x37474f);}
+      if((b.lv||1)>=2){for(const x of[-1.45,0,1.45])D(RB(.06,.04,.06,x,0,q-.02),0xf9a825);D(RB(.02,.003,.3,0,.0045,q-.28),0xffffff);}
+      if((b.lv||1)>=3){const cx=-.05,red=0x1565c0,wt=0xf2f2f2;for(const lx of[-.15,.15])for(const lz of[q-.4,q-.05])D(RB(.03,.95,.03,cx+lx,0,lz),red);
+        D(RB(.34,.04,.04,cx,.45,q-.4),red);D(RB(.34,.04,.04,cx,.45,q-.05),red);for(const lx of[-.15,.15])D(RB(.035,.05,2.1,cx+lx,.95,q+.5),wt);D(RB(.34,.08,.16,cx,.99,q-.45),wt);D(RB(.2,.1,.18,cx,1.05,q-.5),red);
+        // mooring dolphins for the outer berth
+        for(const x of[-1.1,1.0])D(CY(.05,.06,.12,x,-.08,q+.95,10),0x6d6d6d);}
       // warehouse, gate house, light masts, straddle carriers
       W('ind',.9,.22,.5,-.95,0,1.15-2.3,0xb0bec5);D(RB(.92,.02,.52,-.95,.22,-1.15),0x546e7a);
       W('ind',.25,.1,.2,1.2,0,-1.25,0xeceff1);D(RB(.27,.012,.22,1.2,.1,-1.25),0x37474f);for(const x of[.95,1.4])D(RB(.012,.08,.25,x,0,-1.38),0xf9a825);
@@ -1566,6 +1603,10 @@ function servParts(b){
       W('res',.6,FLOOR*2.4,.35,-1.05,0,.35,0xeceff1);D(RB(.62,.014,.37,-1.05,FLOOR*2.4,.35),0x37474f);
       // steel plate stock and a jib crane at the quay
       for(let i=0;i<4;i++)D(RB(.3,.02+.01*i,.16,-.95,0,.92+i*.0),0x6d4c41+i*0x050505);D(CY(.025,.03,.55,-1.3,0,1.2,8),0x1565c0);D(RB(.5,.03,.03,-1.1,.55,1.2),0x1565c0);
+      if((b.lv||1)>=2){const sx=1.22;D(RB(.42,.012,1.9,sx,0,.45),0x6d6a64);for(const s2 of[-1,1])D(RB(.012,.016,1.95,sx+s2*.12,.006,.45),0x3e2723);for(let i=0;i<10;i++)D(RB(.3,.01,.03,sx,.012,-.4+i*.19),0x8d6e63);
+        D(CY(.02,.025,.75,sx+.2,0,-.45,8),0xd84315);D(RB(.04,.03,.55,sx+.2,.75,-.2),0xd84315);}
+      if((b.lv||1)>=3){const fx2=-.85,fz2=q+.75;D(RB(.62,.05,1.55,fx2,-.04,fz2),0x37474f);for(const s2 of[-1,1]){D(RB(.07,.16,1.55,fx2+s2*.28,-.04,fz2),0x546e7a);D(CY(.012,.012,.3,fx2+s2*.28,.12,fz2+.6,6),0xfbc02d);}
+        D(RB(.05,.012,.32,fx2,.0,q+.1),0x9e9e9e);}
       D(RB(2.98,.07,.06,0,-.06,q+.03),0x8f8b84);for(const[x,z]of[[-1.4,-1.4],[1.4,-1.4],[-.3,1.3]]){D(CY(.008,.012,.62,x,0,z,6),0x9aa0a6);L(RB(.08,.02,.03,x,.62,z),0xfff3c4);}
       break;}
     case 'clinic':{D(RB(.98,.004,.98,0,0,0),0xd0cbc0);const ps=asphalt(.42,.24,.22,.33);
@@ -1652,8 +1693,21 @@ function servParts(b){
         const back=bz-bd/2;if(back+HD>.42){const gz=(back-HD)/2,gw=Math.min(2*HW-.3,1.2);D(RB(gw,.16,back+HD-.06,-HW+.15+gw/2,0,gz),0xcfd8dc);D(RB(gw+.02,.02,back+HD-.04,-HW+.15+gw/2,.16,gz),0x546e7a);
           for(let i=0;i<Math.floor(gw/.28);i++)D(RB(.22,.12,.004,-HW+.3+i*.28,.002,back-.035),0x90a4ae);}
         else if(lv>2)D(RB(.5,.012,.3,-HW+.4,.4,bz),0x546e7a);}
-      else{const bx=HW-.28,bz2=HD-.3;booth(bx,bz2);
-        if(lv>2){const ax=-HW+.32,az=-HD+.3;GL(RB(.42,.32,.36,ax,0,az),0x6f9bb8);D(RB(.44,.02,.38,ax,.32,az),0x7d8b94);for(let y=.08;y<.32;y+=.08)D(RB(.43,.006,.37,ax,y,az),0xdedede);L(RB(.3,.03,.004,ax,.26,az+.181),0xffffff);}}}
+      else if(b.kind==='train'){// ticket kiosk outside the entrance, a dispatcher booth at the platform heads; level 3 adds the depot (in the model) and departure boards
+        const kx=-1.34,kz=-1.2;D(RB(.2,.01,.2,kx,0,kz),0xb0b0b0);W('res',.14,.1,.14,kx,.01,kz,0xf4ede0);D(RB(.2,.012,.2,kx,.11,kz),0xc62828);L(RB(.003,.03,.1,kx-.071,.06,kz),0xfff1c9);D(RB(.004,.03,.1,kx-.1,.125,kz),0xffffff);
+        booth(1.36,-.62);
+        if(lv>2)for(const x of[-.8,0])L(RB(.3,.07,.004,x,.2,-.77),0x7fd3ff);}
+      else if(b.kind==='metro'){// street entrance canopy with ticket machines and bike racks; then shops and a roof garden
+        const fz=HD-.2;GL(RB(.3,.008,.2,-HW+.32,.12,fz),0x9fd3f0);for(const e of[-1,1])D(RB(.008,.12,.008,-HW+.32+e*.14,0,fz+.09),0x607d8b);for(let i=0;i<3;i++){D(RB(.03,.07,.025,-HW+.22+i*.06,0,fz-.06),0x37474f);L(RB(.02,.02,.003,-HW+.22+i*.06,.045,fz-.047),0x7fd3ff);}
+        for(let i=0;i<5;i++)D(RB(.004,.03,.05,HW-.45+i*.05,0,fz),0x9e9e9e);D(RB(.24,.003,.06,HW-.35,.001,fz),0x8d8d8d);booth(HW-.15,fz-.15);
+        if(lv>2){const n=Math.max(2,Math.floor((2*HW-.6)/.28));for(let i=0;i<n;i++){const x=-HW+.3+i*.28,c=[0xd84f6a,0x2a9d8f,0xf2c14e,0x5c6bc0][i%4];W('res',.24,.11,.14,x+.12,0,-HD+.12,0xf4ede0);D(RB(.26,.008,.06,x+.12,.09,-HD+.21),c);L(RB(.18,.04,.003,x+.12,.025,-HD+.191),0xfff1c9);}
+          D(RB(2*HW-.5,.006,.2,0,.112,-HD+.12),0x5f8f45);for(let i=0;i<n;i++)D(new THREE.SphereGeometry(.03,6,5).translate(-HW+.42+i*.28,.14,-HD+.12),0x4f8a3f);}}
+      else if(b.kind==='airport'){// weather radar, then a new tall control tower (the extra gates come from airGates)
+        const rx=-HW+.35,rz=-HD+.35;D(RB(.05,.3,.05,rx,0,rz),0xcfd8dc);D(new THREE.SphereGeometry(.07,14,10).translate(rx,.36,rz),0xf5f5f5);D(RB(.12,.01,.12,rx,.29,rz),0x90a4ae);
+        if(lv>2){// a new, taller control tower replaces the old one: tapered shaft, wide glass cab, antenna mast
+          const tx=HW-.25,tz=-HD+.3;D(CY(.12,.14,.12,tx,0,tz,14),0xb0bec5);D(CY(.06,.1,1.85,tx,0,tz,14),0xeceff1);D(CY(.16,.07,.12,tx,1.85,tz,14),0xcfd8dc);GL(new THREE.CylinderGeometry(.24,.18,.2,16).translate(tx,2.07,tz),0x4fa3c7);D(CY(.26,.26,.03,tx,2.17,tz,16),0x37474f);D(CY(.008,.008,.25,tx,2.2,tz,5),0x9e9e9e);L(new THREE.SphereGeometry(.018,6,4).translate(tx,2.46,tz),0xff3b30);}}
+      else{const bx=HW-.28,bz2=b.kind==='ferry'?-HD+.3:HD-.3;booth(bx,bz2);D(RB(.18,.08,.12,bx-.25,0,bz2),0xf4ede0);D(RB(.36,.006,.2,bx-.18,.1,bz2),0x0277bd);
+        if(lv>2){const ax=-HW+.32,az=b.kind==='ferry'?-HD+.3:-HD+.3;GL(RB(.42,.2,.36,ax,0,az),0x6f9bb8);D(RB(.44,.02,.38,ax,.2,az),0x7d8b94);for(const e of[-1,1])D(RB(.44,.03,.004,ax,.22,az+e*.18),0xeceff1);}}}
     else if(!mb||['solar','wind','water'].includes(b.kind)){const x0=H-.14,z0=H-.12;for(let i=0;i<lv;i++){D(RB(.1,.09,.07,x0-i*.12,0,z0),0xe0e0e0);D(RB(.102,.008,.072,x0-i*.12,.09,z0),0x8a8f94);D(RB(.004,.04,.04,x0-i*.12-.051,.03,z0),0x3ddc84);}}
     else{const dl=FLOOR*(lv-1)*(S>1?2:1),{x0,x1,z0,z1,y1}=mb,g0=P[mb.k][mb.i][0];
       for(const k in P)for(const[g]of P[k]){if(g===g0)continue;const p=g.attributes.position;let ch=false;for(let i=0;i<p.count;i++){const y=p.getY(i),x=p.getX(i),z=p.getZ(i);if(y>=y1-.003&&x>=x0-.03&&x<=x1+.03&&z>=z0-.03&&z<=z1+.03){p.setY(i,y+dl);ch=true;}}if(ch)p.needsUpdate=true;}
@@ -2387,7 +2441,7 @@ function updateLightsTL(dt){
 }
 // position + heading along a tile: quadratic curve through the tile centre, or a looped U-turn at a dead end
 const _pp={x:0,z:0,tx:0,tz:1};
-function pathAt(a,prev,b,p,off){_cvS=null;_ppH=null;if(a.ix==='ichg'&&b!==prev&&prev!==a&&!a.cv&&a._mOv==null){const I=ichgInfo(a);if(I){const r=ichgPath(a,prev,b,p,off);if(r)return r;}}if(a._cvl&&b!==prev&&a._cvT&&(a._cvT.has(prev)||a._cvT.has(b)))return tapPath(a,prev,b,p,off);if(a._cvl&&b!==prev){const c=G.curves[a.cv];if(c&&c.S)return curvePath(c,a,prev,b,p,off);}const cx=wx(a.x),cz=wx(a.z);
+function pathAt(a,prev,b,p,off){_cvS=null;_ppH=null;if(_pcar&&_pcar.a===a){const r=connPath(_pcar,p);if(r)return r;}if(a.ix==='ichg'&&b!==prev&&prev!==a&&!a.cv&&a._mOv==null){const I=ichgInfo(a);if(I){const r=ichgPath(a,prev,b,p,off);if(r)return r;}}if(a._cvl&&b!==prev&&a._cvT&&(a._cvT.has(prev)||a._cvT.has(b)))return tapPath(a,prev,b,p,off);if(a._cvl&&b!==prev){const c=G.curves[a.cv];if(c&&c.S)return curvePath(c,a,prev,b,p,off);}const cx=wx(a.x),cz=wx(a.z);
   if(a.ix==='round'&&b!==prev&&prev!==a&&!a.cv&&isJn(a))return roundPath(a,prev,b,p,off);
   if(b===prev&&prev!==a){const ux=Math.sign(a.x-prev.x),uz=Math.sign(a.z-prev.z),nx=-uz,nz=ux,r=Math.max(.02,Math.abs(off)),d0=Math.min(.5,.95-r),La=Math.PI*r,Lt=2*d0+La,s=p*Lt,ex=cx-ux*.5,ez=cz-uz*.5;
     if(s<d0){_pp.x=ex+ux*s+nx*off;_pp.z=ez+uz*s+nz*off;_pp.tx=ux;_pp.tz=uz;}
@@ -2420,7 +2474,7 @@ function roundPath(a,prev,b,p,off){const cx=wx(a.x),cz=wx(a.z),ux=Math.sign(a.x-
   else{const f=(s-dE-La)/Math.max(1e-4,dX),rx=cx+Math.cos(tX)*R,rz=cz+Math.sin(tX)*R;_pp.x=rx+(Xx-rx)*f;_pp.z=rz+(Xz-rz)*f;const tx=Xx-rx,tz=Xz-rz,l=Math.hypot(tx,tz)||1,ax=-Math.sin(tX)*sd,az=Math.cos(tX)*sd,k=1-sm(0,.6,f);_pp.tx=tx/l*(1-k)+ax*k;_pp.tz=tz/l*(1-k)+az*k;}
   const l=Math.hypot(_pp.tx,_pp.tz)||1;_pp.tx/=l;_pp.tz/=l;return _pp;}
 // road surface height: bridges over water, and ramps on the land tiles leading onto them
-function surfY(t,x,z){if(_ppH!=null&&t.ix==='ichg')return .012+_ppH;if(t.cv&&_cvS&&_cvS[0]===G.curves[t.cv])return .012+curveH(_cvS[0],_cvS[1]);if(t.water)return .142;const d=t._ramp;if(!d)return .012;return .012+.13*clamp((x-wx(t.x))*d[0]+(z-wx(t.z))*d[1]+.5,0,1);}
+function surfY(t,x,z){if(_ppH!=null)return .012+_ppH;if(t.cv&&_cvS&&_cvS[0]===G.curves[t.cv])return .012+curveH(_cvS[0],_cvS[1]);if(t.water)return .142;const d=t._ramp;if(!d)return .012;return .012+.13*clamp((x-wx(t.x))*d[0]+(z-wx(t.z))*d[1]+.5,0,1);}
 // shared stop logic for vehicles, cyclists and pedestrians at signals
 function signalStop(o,step,pStop,cautious){
   if(!o.a||!o.b||o.b===o.a||!interSet.has(key(o.b))||interSet.has(key(o.a)))return false;
@@ -2447,7 +2501,15 @@ function spawnCar(c,roads,onTile,force){for(let tries=0;tries<8;tries++){const f
     c.a=a;c.prev=a;c.b=rt&&rt.length>1?rt[1]:nb[Math.floor(Math.random()*nb.length)];c.route=rt&&rt.length>1?rt:null;c.ri=0;c.done=false;c.p=fromEdge?.05:.5;c.bsSp=a;c.bsK=null;c.bsT=0;c.cur=fromEdge?c.sp*.8:0;c.lane=Math.random()<.5?0:1;c.offC=null;
     (onTile.get(key(a))||onTile.set(key(a),[]).get(key(a))).push(c);return true;}return false;}
 // called when a car reaches the next tile; returns false if the car leaves the map
-function nextHop(c){if(c.route){c.ri++;const rt=c.route;
+function nextHop(c){const r0=nextHop0(c);c._clA=null;if(r0&&c.b){
+    if(isClover(c.a)&&c.prev&&isRightOf(c.a,c.prev,c.b)&&c.x2J===c.a){c._cnJ=c.a;c._cnX=c.prev;c._cnY=c.b;}else if(c.prev!==c._cnJ){c._cnJ=null;}
+    if(c.x2J!==c.a)c.x2J=null;
+    if(isClover(c.b)&&c.b!==c.a){const nb=roadNeighbors(c.b).filter(n=>n!==c.a);let x=null;if(c.route&&c.route[c.ri+2]&&nb.includes(c.route[c.ri+2]))x=c.route[c.ri+2];
+      else if(nb.length){const sx=c.b.x-c.a.x,sz=c.b.z-c.a.z,st=nb.find(n=>n.x-c.b.x===sx&&n.z-c.b.z===sz);x=st&&Math.random()<.6?st:nb[Math.floor(Math.random()*nb.length)];}
+      c.x2=x;c.x2J=x?c.b:null;}}
+  return r0;}
+function nextHop0(c){if(c.x2J&&c.x2J===c.a&&c.x2&&!c.route&&roadNeighbors(c.a).includes(c.x2)){c.b=c.x2;return true;}
+  if(c.route){c.ri++;const rt=c.route;
     if(c.ri>=rt.length-1){if(c.line)return lineNext(c);c.route=null;c.done=true;if(isExit(c.a))return false;}
     else{const nx=rt[c.ri+1];if(nx.road&&roadNeighbors(c.a).includes(nx)){c.b=nx;return true;}
       const r2=route(c.a,rt[rt.length-1],6000);if(r2&&r2.length>1){c.route=r2;c.ri=0;c.b=r2[1];return true;}c.route=null;c.done=true;}}
@@ -2478,7 +2540,7 @@ const SHIPF={cargo:1.35,tug:2.2,ferry:1,sail:1};
 const CSLOT=(()=>{const L=3.2,cc=[0xc62828,0x1565c0,0x2e7d32,0xef6c00,0x607d8b,0xf9a825,0x00838f,0x8d6e63,0xeceff1],r=[];let n=0;
   for(let i=0;i<11;i++){const z=-L*.28+i*.17;for(let c=0;c<3;c++){const h=1+((i*7+c*3)%4);for(let k=0;k<h;k++)r.push([-.13+c*.13,.124+k*.052,z,cc[(n++*5+k)%cc.length],k]);}}return r.sort((a,b)=>a[4]-b[4]);})();
 const ctrMat=new THREE.MeshStandardMaterial({roughness:.7,metalness:.1}),ctrGeo=RB(.12,.05,.155,0,0,0);
-function mkShip(type,own){const f=type==='cargo'&&own?.68:SHIPF[type],gk=type+f;if(!SHIPG[gk])SHIPG[gk]=shipGeo(type,type==='cargo').scale(f,f,f);const m=new THREE.Mesh(SHIPG[gk],bDetMat);
+function mkShip(type,own){const f=type==='cargo'&&own?.6:SHIPF[type],gk=type+f;if(!SHIPG[gk])SHIPG[gk]=shipGeo(type,type==='cargo').scale(f,f,f);const m=new THREE.Mesh(SHIPG[gk],bDetMat);
   let ct=null;if(type==='cargo'){ct=new THREE.InstancedMesh(ctrGeo,ctrMat,CSLOT.length);const c=new THREE.Color();CSLOT.forEach((s2,i)=>{dummy.position.set(s2[0],s2[1],s2[2]);dummy.rotation.set(0,0,0);dummy.scale.setScalar(1);dummy.updateMatrix();ct.setMatrixAt(i,dummy.matrix);ct.setColorAt(i,c.setHex(s2[3]));});
     ct.scale.setScalar(f);ct.castShadow=true;ct.frustumCulled=false;m.add(ct);}m.castShadow=true;m.receiveShadow=true;
   const L={cargo:3.2,ferry:1.6,tug:.42,sail:.36}[type]*f,w=new THREE.Mesh(new THREE.PlaneGeometry(L*.35,L*.9).rotateX(-Math.PI/2).translate(0,.006,-L*.95),shipWake);m.add(w);
@@ -2497,22 +2559,27 @@ function syncOwnShips(){for(const o of ships.slice())if(o.own&&o.home&&(!o.home.
     for(let i=have;i<(t.b.fleet||0);i++){const o=mkShip(k==='port'?'cargo':'ferry',true);o.mode='idle';o.pk=k;o.home=t;o.port=null;o.m.visible=false;o.t=4+i*25;}
     if(have>(t.b.fleet||0)){const ex=ships.filter(o=>o.own&&o.home===t);for(let i=t.b.fleet||0;i<ex.length;i++)dropShip(ex[i]);}}}
 let shipsG=null,shipSyncT=0;
-function berth(o,pt){const r=pt.b.rot||0,fx=Math.sin(r),fz=Math.cos(r),ax=Math.cos(r),az=-Math.sin(r),cx=wx(pt.x)+(LX(pt.b)-1)/2,cz=wx(pt.z)+(LZ(pt.b)-1)/2,qd=ldims(pt.b)[1]/2+(o.type==='cargo'?.24*o.f+.036:.18+.03);
-  o.port=pt;const sh=o.type==='ferry'?-.15:0;o.D=[cx+fx*qd+ax*sh,cz+fz*qd+az*sh];o.O=[o.D[0]+fx*4+ax*1.5,o.D[1]+fz*4+az*1.5];o.F=[o.O[0]+fx*22+ax*14,o.O[1]+fz*22+az*14];o.qyaw=Math.atan2(-ax,-az);}
+// berths along a cargo quay: one centre berth, two at level 2, plus a pier berth at level 3; big foreign freighters need the whole main quay
+const portBerths=b=>(b.lv||1)<2?[0]:(b.lv||1)<3?[-.98,.98]:[-.98,.98,0];
+function freeBerth(pt,o){if(pt.b.kind!=='port')return ships.some(q=>q!==o&&q.port===pt)?null:0;const B=portBerths(pt.b),occ=ships.filter(q=>q!==o&&q.port===pt);
+  if(!o.own){if(occ.some(q=>q.bi!==2))return null;return -1;}
+  for(let i=0;i<B.length;i++){if(B.length===1&&occ.length)continue;if(occ.some(q=>q.bi===i||(q.bi===-1&&i<2)))continue;return i;}return null;}
+function berth(o,pt,bi){const r=pt.b.rot||0,fx=Math.sin(r),fz=Math.cos(r),ax=Math.cos(r),az=-Math.sin(r),cx=wx(pt.x)+(LX(pt.b)-1)/2,cz=wx(pt.z)+(LZ(pt.b)-1)/2,qd=ldims(pt.b)[1]/2+(o.type==='cargo'?.24*o.f+.036:.18+.03)+(bi===2?.5:0);
+  o.bi=bi==null?0:bi;o.port=pt;const sh=o.type==='ferry'?-.15:pt.b.kind==='port'&&bi>=0?portBerths(pt.b)[bi]||0:0;o.D=[cx+fx*qd+ax*sh,cz+fz*qd+az*sh];o.O=[o.D[0]+fx*4+ax*1.5,o.D[1]+fz*4+az*1.5];o.F=[o.O[0]+fx*22+ax*14,o.O[1]+fz*22+az*14];o.qyaw=Math.atan2(-ax,-az);}
 /* ---------- cargo port: the quay cranes unload containers from a berthed ship, then load it again before it sails ---------- */
 const TRADE={imp:{n:'Mostly import',u:.9,l:.3},bal:{n:'Balanced',u:.6,l:.6},exp:{n:'Mostly export',u:.3,l:.95}};
 const PA=new Map();const craneMat={y:0xd84315};
-function portAnim(pt){let A=PA.get(pt);if(A)return A;A={cr:[]};const mk=(g,c)=>{const m=new THREE.Mesh(g,new THREE.MeshStandardMaterial({color:c,roughness:.6}));m.castShadow=true;scene.add(m);return m;};
-  for(const lx of[-.75,.65])A.cr.push({lx,tr:mk(RB(.16,.05,.13,0,-.025,0),0x37474f),cb:mk(RB(.006,1,.006,0,-1,0),0x222222),sp:mk(RB(.21,.014,.11,0,-.014,0),0xf9a825),bx:mk(RB(.2,.066,.1,0,-.08,0),0xc62828),ph:lx<0?0:.5,z:0,h:0});
+function portAnim(pt,pier){let A=PA.get(pt);if(A&&A.pier===!!pier)return A;if(A)portAnimDrop(pt);A={cr:[],pier:!!pier};const mk=(g,c)=>{const m=new THREE.Mesh(g,new THREE.MeshStandardMaterial({color:c,roughness:.6}));m.castShadow=true;scene.add(m);return m;};
+  for(const[ci,lx]of(pier?[-.75,.65,-.05]:[-.75,.65]).entries())A.cr.push({ci,lx,tr:mk(RB(.16,.05,.13,0,-.025,0),0x37474f),cb:mk(RB(.006,1,.006,0,-1,0),0x222222),sp:mk(RB(.21,.014,.11,0,-.014,0),0xf9a825),bx:mk(RB(.2,.066,.1,0,-.08,0),0xc62828),ph:lx<0?0:.5,z:0,h:0});
   PA.set(pt,A);return A;}
 function portAnimDrop(pt){const A=PA.get(pt);if(!A)return;for(const c of A.cr)for(const k of['tr','cb','sp','bx']){scene.remove(c[k]);c[k].geometry.dispose();c[k].material.dispose();}PA.delete(pt);}
 function tradeCount(pt,kind,n){const T2=G.trade||(G.trade={imp:0,exp:0,inc:0});const b=pt.b;b.tIn=b.tIn||0;b.tOut=b.tOut||0;
   if(kind==='imp'){T2.imp+=n;b.tIn+=n;const v=n*20;T2.inc+=v;G.money+=v;G.impB=Math.min(25,(G.impB||0)+n*.15);}
   else{T2.exp+=n;b.tOut+=n;const v=n*(stats.ij>0?45:15);T2.inc+=v;G.money+=v;}}
 function updatePortCranes(dt,ports){const CY=4.2;for(const[pt,A]of PA)if(!ports.includes(pt))portAnimDrop(pt);
-  for(const pt of ports){const A=portAnim(pt),r=pt.b.rot||0,fx=Math.sin(r),fz=Math.cos(r),ax=Math.cos(r),az=-Math.sin(r),cx=wx(pt.x)+(LX(pt.b)-1)/2,cz=wx(pt.z)+(LZ(pt.b)-1)/2,HD=ldims(pt.b)[1]/2,q=HD-.02;
-    const sh=ships.find(o=>o.port===pt&&o.mode==='dock'&&o.ct),boomY=.78,yardZ=q-.32;
-    for(const c of A.cr){let z=c.z,h=c.h,show=false;
+  for(const pt of ports){const A=portAnim(pt,(pt.b.lv||1)>2),r=pt.b.rot||0,fx=Math.sin(r),fz=Math.cos(r),ax=Math.cos(r),az=-Math.sin(r),cx=wx(pt.x)+(LX(pt.b)-1)/2,cz=wx(pt.z)+(LZ(pt.b)-1)/2,HD=ldims(pt.b)[1]/2,q=HD-.02;
+    const docked=ships.filter(o=>o.port===pt&&o.mode==='dock'&&o.ct),boomY=.78,yardZ=q-.32,lvl=pt.b.lv||1;
+    for(const c of A.cr){let z=c.z,h=c.h,show=false;const sh=docked.find(o=>o.bi===-1?c.ci<2:lvl<2?c.ci<2:o.bi===c.ci);
       if(sh&&(sh.phase==='unload'||sh.phase==='load')){c.ph+=dt/CY;if(c.ph>=1){c.ph-=1;c.done=false;c.got=false;}
         const shipZ=(sh.D[0]-cx)*fx+(sh.D[1]-cz)*fz,deck=.13*sh.f+.06*sh.f*Math.max(1,sh.cn/sh.full*3),un=sh.phase==='unload',pz=un?shipZ:yardZ,dz=un?yardZ:shipZ,py=un?deck:.07,dy=un?.07:deck,p=c.ph;
         const mv=(a,b2,u)=>a+(b2-a)*sm(0,1,u);
@@ -2525,21 +2592,26 @@ function updatePortCranes(dt,ports){const CY=4.2;for(const[pt,A]of PA)if(!ports.
       const X=cx+ax*c.lx+fx*c.z,Zw=cz+az*c.lx+fz*c.z,yaw=r;
       c.tr.position.set(X,boomY,Zw);c.tr.rotation.y=yaw;c.sp.position.set(X,c.y,Zw);c.sp.rotation.y=yaw;c.bx.position.set(X,c.y,Zw);c.bx.rotation.y=yaw;c.bx.visible=show;
       const L2=Math.max(.01,boomY-c.y);c.cb.position.set(X,boomY,Zw);c.cb.scale.set(1,L2,1);}
-    if(sh&&sh.phase==='unload'&&sh.cn<=sh.lo+.01)sh.phase='load';if(sh&&sh.phase==='load'&&sh.cn>=sh.hi-.01){sh.phase='done';sh.t=4;}}}
+    for(const sh of docked){if(sh.phase==='unload'&&sh.cn<=sh.lo+.01)sh.phase='load';if(sh.phase==='load'&&sh.cn>=sh.hi-.01){sh.phase='done';sh.t=4;}}}}
 /* ---------- shipyard: ordered ships are built in the dry dock, launched, and sail to their port or ferry terminal ---------- */
-const SY={m:null,ord:null,yard:null,st:'',t:0};const SHIP_BUILD=45;
+const SHIP_BUILD=45,SYM=new Map();
+// build slots: the dry dock; level 2 adds a slipway beside it, level 3 a floating dock moored off the quay
+const yardSlots=b=>[[.25,.4],[1.22,.45],[-.85,ldims(b)[1]/2+.75]].slice(0,Math.min(3,b.lv||1));
 function updateShipyard(dt){const yards=svcRoots().filter(t=>t.b&&t.b.kind==='shipyard'&&!t.b.uc),Q=G.shipOrd||(G.shipOrd=[]);
-  if(!yards.length||!Q.length){if(SY.m&&!yards.includes(SY.yard)){scene.remove(SY.m);SY.m=null;}if(!Q.length&&SY.m&&SY.st!=='launch'){scene.remove(SY.m);SY.m=null;}return;}
-  const y=yards[0],od=Q[0],home=G.tiles[od.home];if(!home||!home.b||home.b.kind!==(od.k==='cargo'?'port':'ferry')){Q.shift();return;}
-  const r=y.b.rot||0,fx=Math.sin(r),fz=Math.cos(r),ax=Math.cos(r),az=-Math.sin(r),cx=wx(y.x)+(LX(y.b)-1)/2,cz=wx(y.z)+(LZ(y.b)-1)/2,dx0=.25;
-  if(!SY.m||SY.ord!==od){if(SY.m)scene.remove(SY.m);const f=od.k==='cargo'?.68:1,gk=od.k+f;if(!SHIPG[gk])SHIPG[gk]=shipGeo(od.k,od.k==='cargo').scale(f,f,f);SY.m=new THREE.Mesh(SHIPG[gk],bDetMat);SY.m.castShadow=true;scene.add(SY.m);SY.ord=od;SY.yard=y;SY.st='build';SY.f=f;}
-  const sz=.4;if(SY.st==='build'){od.p=(od.p||0)+dt/SHIP_BUILD;const p=Math.min(1,od.p);SY.m.scale.set(1,.12+.88*sm(0,1,p),.35+.65*sm(0,.6,p));
-    SY.m.position.set(cx+ax*dx0+fx*sz,.012,cz+az*dx0+fz*sz);SY.m.rotation.y=r;if(p>=1){SY.st='launch';SY.t=0;}}
-  else if(SY.st==='launch'){SY.t+=dt;const u=Math.min(1,SY.t/7),L=(od.k==='cargo'?3.2*SY.f:1.6),z=sz+u*(1.5+L/2+.4-sz);SY.m.scale.set(1,1,1);
-    SY.m.position.set(cx+ax*dx0+fx*z,.012-.02*Math.sin(Math.min(1,u*1.4)*Math.PI)*(u<.7?1:0),cz+az*dx0+fz*z);SY.m.rotation.y=r;
-    if(u>=1){scene.remove(SY.m);SY.m=null;Q.shift();const b=home.b;b.ford=Math.max(0,(b.ford||0)-1);b.fleet=(b.fleet||0)+1;
-      const o=mkShip(od.k,true);o.pk=home.b.kind;o.home=home;o.x=SY.m?0:cx+ax*dx0+fx*z;o.z=cz+az*dx0+fz*z;o.yaw=r;berth(o,home);o.path=[o.O,o.D];o.mode='in';o.m.visible=true;
-      toast(`New ${od.k==='cargo'?'container ship':'ferry'} launched at the shipyard: it is sailing to ${b.name||SERV[b.kind].name}`,3500);Snd.play('milestone');renderCats&&0;}}}
+  for(const[od,m]of SYM)if(!Q.includes(od)||!yards.some(y=>key(y)===od.y)){scene.remove(m);SYM.delete(od);if(Q.includes(od)&&od.st!=='launch'){od.y=null;od.si=null;}}
+  if(!yards.length)return;
+  for(const od of Q.slice()){const home=G.tiles[od.home];if(!home||!home.b||home.b.kind!==(od.k==='cargo'?'port':'ferry')){Q.splice(Q.indexOf(od),1);continue;}
+    if(od.y==null){for(const y of yards){const sl=yardSlots(y.b);for(let i=0;i<sl.length;i++)if(!Q.some(o=>o.y===key(y)&&o.si===i)){od.y=key(y);od.si=i;break;}if(od.y!=null)break;}if(od.y==null)continue;}
+    const y=G.tiles[od.y],sl=yardSlots(y.b)[od.si];if(!sl){od.y=null;od.si=null;continue;}
+    const r=y.b.rot||0,fx=Math.sin(r),fz=Math.cos(r),ax=Math.cos(r),az=-Math.sin(r),cx=wx(y.x)+(LX(y.b)-1)/2,cz=wx(y.z)+(LZ(y.b)-1)/2,[lx,lz]=sl,f=od.k==='cargo'?.6:1;
+    let m=SYM.get(od);if(!m){const gk=od.k+f;if(!SHIPG[gk])SHIPG[gk]=shipGeo(od.k,od.k==='cargo').scale(f,f,f);m=new THREE.Mesh(SHIPG[gk],bDetMat);m.castShadow=true;scene.add(m);SYM.set(od,m);}
+    const afloat=od.si===2;if(!od.st)od.st='build';
+    if(od.st==='build'){od.p=(od.p||0)+dt/SHIP_BUILD;const p=Math.min(1,od.p);m.scale.set(1,.12+.88*sm(0,1,p),.35+.65*sm(0,.6,p));m.position.set(cx+ax*lx+fx*lz,afloat?.0:.012,cz+az*lx+fz*lz);m.rotation.y=r;if(p>=1){od.st='launch';od.t=0;}}
+    else{od.t+=dt;const u=Math.min(1,od.t/7),L=od.k==='cargo'?3.2*f:1.6,z=afloat?lz+u*1.2:lz+u*(ldims(y.b)[1]/2+L/2+.4-lz);m.scale.set(1,1,1);
+      m.position.set(cx+ax*lx+fx*z,afloat?0:.012-.02*Math.sin(Math.min(1,u*1.4)*Math.PI)*(u<.7?1:0),cz+az*lx+fz*z);m.rotation.y=r;
+      if(u>=1){scene.remove(m);SYM.delete(od);Q.splice(Q.indexOf(od),1);const b=home.b;b.ford=Math.max(0,(b.ford||0)-1);b.fleet=(b.fleet||0)+1;
+        const o=mkShip(od.k,true);o.pk=b.kind;o.home=home;o.x=cx+ax*lx+fx*z;o.z=cz+az*lx+fz*z;o.yaw=r;const bi=freeBerth(home,o);if(bi!=null){berth(o,home,bi);o.path=[o.O,o.D];o.mode='in';}else{o.mode='idle';o.t=10;}o.m.visible=true;
+        toast(`New ${od.k==='cargo'?'container ship':'ferry'} launched at the shipyard: it is sailing to ${b.name||SERV[b.kind].name}`,3500);Snd.play('milestone');}}}}
 const _shipRange=N/2+110;
 function updateShips(dt){if(!G)return;if(!shipsInit)initShips();if(shipsG!==G){for(const o of ships.slice())if(o.own)dropShip(o);for(const[pt]of PA)portAnimDrop(pt);shipsG=G;shipSyncT=0;}
   if((shipSyncT-=dt)<=0){shipSyncT=1;syncOwnShips();}
@@ -2548,8 +2620,8 @@ function updateShips(dt){if(!G)return;if(!shipsInit)initShips();if(shipsG!==G){f
   for(const o of ships){
     if(o.mode==='lane'){o.x+=o.dir*o.sp*dt;if(o.x>_shipRange)o.x=-_shipRange;if(o.x<-_shipRange)o.x=_shipRange;o.y=-.005+Math.sin(performance.now()/900+o.x)*.004;}
     else{// a cargo ship calling at one of the city's ports
-      if(o.mode==='idle'){o.m.visible=false;o.t-=dt;const ports=PK[o.pk];if(o.t<=0&&ports.length){const used=new Set(ships.filter(q=>q!==o&&q.port).map(q=>q.port));const pt=o.home?(ports.includes(o.home)&&!used.has(o.home)?o.home:null):ports.find(p=>!used.has(p));if(pt){
-          berth(o,pt);o.x=o.F[0];o.z=o.F[1];o.path=[o.O,o.D];o.mode='in';o.m.visible=true;if(o.ct){o.cn=o.full;o.ct.count=o.full;}}}}
+      if(o.mode==='idle'){o.m.visible=false;o.t-=dt;const ports=PK[o.pk];if(o.t<=0&&ports.length){let pt=null,bi=null;for(const p of(o.home?(ports.includes(o.home)?[o.home]:[]):ports)){const k=freeBerth(p,o);if(k!=null){pt=p;bi=k;break;}}if(pt){
+          berth(o,pt,bi);o.x=o.F[0];o.z=o.F[1];o.path=[o.O,o.D];o.mode='in';o.m.visible=true;if(o.ct){o.cn=o.full;o.ct.count=o.full;}}}}
       else if(o.port&&(!o.port.b||o.port.b.kind!==o.pk)){o.mode='idle';o.port=null;o.t=20;continue;}
       else if(o.mode==='in'||o.mode==='out'){const tg=o.path[0],dx=tg[0]-o.x,dz=tg[1]-o.z,d=Math.hypot(dx,dz),sp=o.sp*(d<2?.35:1);
         if(d<.02){o.path.shift();if(!o.path.length){if(o.mode==='in'){o.mode='dock';o.t=o.pk==='ferry'?30:240;if(o.ct){const tm=TRADE[o.port.b.trade||'bal'];o.phase='unload';o.lo=Math.round(o.full*(1-tm.u));o.hi=Math.round(o.full*tm.l);}}else{o.mode='idle';o.port=null;if(!o.own)o.home=null;o.t=o.pk==='ferry'?12:30;}}}
@@ -2675,11 +2747,12 @@ function updateCars(dt){
     if(lead<9&&step>lead-gmin){step=Math.max(0,lead-gmin);c.cur=Math.min(c.cur,step/Math.max(dt,1e-4));}
     c.brake=dv<-.05||c.cur<.12;
     if(c.a._cvl&&G.curves[c.a.cv]){const cc=G.curves[c.a.cv];step/=clamp(cc.bd[c.a.cvi+1]-cc.bd[c.a.cvi],.35,2.2);}
+    else if(c._clA===c.a&&c._cl)step/=clamp(c._cl,.3,4);
     else if((c.a.ix==='ichg'||c.a.ix==='round')&&c.b&&c.prev&&c.b!==c.prev&&c.prev!==c.a){if(c._plA!==c.a||c._plB!==c.b){c._plA=c.a;c._plB=c.b;c._pl=c.a.ix==='ichg'?ichgLen(c.a,c.prev,c.b,c.offC):1.4;}step/=clamp(c._pl,.5,6);}
     c.p+=step;
     if(c.p>=1){c.p-=1;c.prev=c.a;c.a=c.b;c.bsK=null;c.bsT=0;c.sgK=null;c.sgT=0;if(!nextHop(c)){if(c.line)lineEnd(c,true);setCar(c,k,true);c.shown=false;c.a=null;c.route=null;continue;}}
     let lo=laneOff(c.a,c.lane||0);if(c.v.id==='bus'&&c.a.bs&&c.b!==c.prev&&c.bsK!==c.a)lo=Math.max(lo,rtOf(c.a).cw-.055);if(c.offC==null)c.offC=lo;c.offC+=(lo-c.offC)*Math.min(1,dt*2.6);
-    const pp=pathAt(c.a,c.prev,c.b,c.p,c.offC),y=surfY(c.a,pp.x,pp.z);
+    _pcar=c;const pp=pathAt(c.a,c.prev,c.b,c.p,c.offC),y=surfY(c.a,pp.x,pp.z);_pcar=null;_ppH=null;
     c.pos.set(pp.x,y,pp.z);c.yaw=Math.atan2(pp.tx,pp.tz);const d=c.a._ramp,pitch=d?-Math.atan(.13*(pp.tx*d[0]+pp.tz*d[1])):0;
     dummy.position.copy(c.pos);dummy.rotation.set(pitch,c.yaw,0,'YXZ');dummy.scale.set(1,1,1);setCar(c,k,false);dummy.rotation.order='XYZ';
   }
@@ -3176,7 +3249,13 @@ function termConnected(t){const k=t.b.kind,around=stationTilesAround(t);
   if(k==='bus')return around.some(n=>n.road);if(k==='metro')return around.some(n=>n.metro);if(k==='train')return around.some(n=>n.rail);if(k==='airport')return !!runwayLine(t);return true;}
 // transit vehicles must be bought before a terminal or station runs
 const FLEET={bus:{v:'bus',vs:'buses',cost:3000,max:4},train:{v:'train',vs:'trains',cost:15000,max:4},metro:{v:'metro train',vs:'metro trains',cost:18000,max:4},airport:{v:'plane',vs:'planes',cost:30000,max:3},ferry:{v:'ferry',vs:'ferries',cost:9000,max:3},port:{v:'container ship',vs:'container ships',cost:40000,max:3}};
-const SHIPK=new Set(['ferry','port']);const hasYard=()=>G.tiles.some(t=>t.b&&t.b.kind==='shipyard'&&!t.b.uc);
+const SHIPK=new Set(['ferry','port']);
+// what each transport terminal gains at levels 2 and 3 (shown in the sheet, built in servParts)
+const TRUP={bus:[['Dispatcher booth at the gates','Bus garage at the back (deep lots)'],['Upper storey on the hall','Rooftop solar panels']],
+  train:[['Ticket booth outside the entrance','Dispatcher booth'],['Train depot with a maintenance shed','Taller hall with a video wall']],
+  metro:[['Street entrance with glass canopy and ticket machines','Bike parking'],['Retail arcade','Rooftop garden']],
+  airport:[['Weather radar','One more gate (if the terminal is wide enough)'],['New tall control tower','Another gate (if wide enough)']],
+  ferry:[['Ticket booth and covered queue','Dispatcher booth'],['Waiting lounge annex','Rooftop viewing deck']]};const hasYard=()=>G.tiles.some(t=>t.b&&t.b.kind==='shipyard'&&!t.b.uc);
 // buses need somewhere to stop: at least one bus stop on the streets before any can be bought
 function fleetNeed(b){if(b.kind==='bus'&&!G.tiles.some(t=>t.bs))return 'Place at least one bus stop first (Roads → Bus stop).';if(SHIPK.has(b.kind)&&!hasYard())return 'Ships are built at a shipyard: build one on the coast first (Sea → Shipyard).';return '';}
 function fleetOK(b){return !FLEET[b.kind]||(b.fleet||0)>0;}
@@ -3259,7 +3338,7 @@ const planeG=mergeG([[new THREE.CylinderGeometry(.06,.06,1.0,12).rotateX(Math.PI
 const planeMesh=new THREE.InstancedMesh(planeG,new THREE.MeshStandardMaterial({vertexColors:true,roughness:.35,metalness:.3,envMap}),24);planeMesh.count=0;planeMesh.castShadow=true;planeMesh.frustumCulled=false;scene.add(planeMesh);
 const flights=new Map(),PLANE_Y=.12;
 // gates (local x) for real-size narrow-body jets (37 m long, 36 m span): two per airport
-function airGates(b){const W=ldims(b)[0],n=clamp(terminalStats(b).plats,1,Math.max(1,Math.floor((W+.2)/2))),r=[];for(let i=0;i<n;i++)r.push((i-(n-1)/2)*2);return r;}
+function airGates(b){const W=ldims(b)[0],n=clamp(terminalStats(b).plats+Math.min(3,b.lv||1)-1,1,Math.max(1,Math.floor((W+.2)/2))),r=[];for(let i=0;i<n;i++)r.push((i-(n-1)/2)*2);return r;}
 function airFrame(t){const[LW,LD]=ldims(t.b),HD=LD/2,LN=HD+.5,dz=2-HD,r=t.b.rot||0,cx=wx(t.x)+(LX(t.b)-1)/2,cz=wx(t.z)+(LZ(t.b)-1)/2,ca=Math.cos(r),sa=Math.sin(r);
   return{LN,dz,W:(x,z)=>[cx+x*ca+z*sa,cz-x*sa+z*ca],L:(X,Z)=>[(X-cx)*ca-(Z-cz)*sa,(X-cx)*sa+(Z-cz)*ca],tile:(x,z)=>{const p=[cx+x*ca+z*sa,cz-x*sa+z*ca];return T(Math.round(p[0]+N/2-.5),Math.round(p[1]+N/2-.5));}};}
 // taxi route from the runway to the taxi lane in front of a gate (tile path over taxiway tiles)
@@ -3591,15 +3670,15 @@ function renderSheet(){
   h+=`<small style="color:var(--mute)">Coverage: ${covList}</small>`;
   if(b.kind==='ferry')h+=`<label>Lot size · ${ldims(b)[0]} wide × ${ldims(b)[1]} deep</label><div class="chips"><button data-twd="-1,0">Narrower</button><button data-twd="1,0">Wider</button><button data-twd="0,-1">Shallower</button><button data-twd="0,1">Deeper</button></div><small style="color:var(--mute)">The quay stays on the water; the lot grows inland and along the shore where there is room.</small>`;
   if(FLEET[b.kind]){const F=FLEET[b.kind],n=b.fleet||0,need=fleetNeed(b);h+=`<label>Vehicles · ${n} of ${F.max} ${F.vs}</label>${need?`<small style="color:var(--bad)">${need}</small>`:n||b.kind==='port'?'':`<small style="color:var(--bad)">No ${F.vs} yet: the service is closed until you buy one.</small>`}
-    ${SHIPK.has(b.kind)&&b.ford?`<small>${b.ford} on order at the shipyard${(()=>{const o=(G.shipOrd||[]).find(o=>o.home===key(t));return o&&o.p?` · ${Math.round(Math.min(1,o.p)*100)}% built`:''})()}</small>`:''}${b.kind==='port'?`<small style="color:var(--mute)">Foreign freighters call here anyway; your own container ships bring extra trips (more trade income).</small>`:''}
+    ${SHIPK.has(b.kind)&&b.ford?`<small>${b.ford} on order at the shipyard${(()=>{const o=(G.shipOrd||[]).filter(o=>o.home===key(t)).sort((p,q)=>(q.p||0)-(p.p||0))[0];return o&&o.p?` · ${Math.round(Math.min(1,o.p)*100)}% built`:''})()}</small>`:''}${b.kind==='port'?`<small style="color:var(--mute)">Foreign freighters call here anyway; your own container ships bring extra trips (more trade income).</small>`:''}
     <div class="chips"><button id="eBuyV" class="on" ${n+(b.ford||0)>=F.max||need?'disabled':''}>${SHIPK.has(b.kind)?'Order':'Buy'} a ${F.v} · ${fmt(F.cost)}</button><button id="eSellV" ${n?'':'disabled'}>Sell one · ${fmt(F.cost*.5)}</button></div><small style="color:var(--mute)">Each ${F.v} costs ${fmt(F.cost*.012)} / mo to run.</small>`;}
   if(b.kind==='port'){const tm=b.trade||'bal',T2=G.trade||{};h+=`<label>Trade</label><div class="chips">${Object.entries(TRADE).map(([k,v])=>`<button data-trd="${k}" class="${tm===k?'on':''}">${v.n}</button>`).join('')}</div>
     <small style="color:var(--mute)">Import: ships unload most of their containers (customs duty, shops get goods, commercial demand up). Export: ships leave full of your factories' goods (more income when you have industry).</small>
     <p style="margin:6px 0">Containers in / out here: <b>${(b.tIn||0).toLocaleString()} / ${(b.tOut||0).toLocaleString()}</b><br>City trade income so far: <b>${fmt(Math.round(T2.inc||0))}</b></p>`;}
-  if(b.kind==='shipyard'){const Q=G.shipOrd||[];h+=`<label>Ships on order · ${Q.length}</label>${Q.length?Q.map((o,i)=>{const hm=G.tiles[o.home];return`<p style="margin:4px 0">${o.k==='cargo'?'Container ship':'Ferry'} for ${hm&&hm.b?hm.b.name||SERV[hm.b.kind].name:'?'}: <b>${i?'waiting':Math.round(Math.min(1,o.p||0)*100)+'% built'}</b></p>`;}).join(''):'<small style="color:var(--mute)">Order container ships at a cargo port and ferries at a ferry terminal: they are built here, launched and sail off to their home port.</small>'}`;}
+  if(b.kind==='shipyard'){const Q=G.shipOrd||[];h+=`<label>Ships on order · ${Q.length} · ${Math.min(3,b.lv||1)} build slot${(b.lv||1)>1?'s':''}</label>${Q.length?Q.map((o,i)=>{const hm=G.tiles[o.home];return`<p style="margin:4px 0">${o.k==='cargo'?'Container ship':'Ferry'} for ${hm&&hm.b?hm.b.name||SERV[hm.b.kind].name:'?'}: <b>${o.y==null?'waiting for a free slot':o.st==='launch'?'launching':Math.round(Math.min(1,o.p||0)*100)+'% built'}</b></p>`;}).join(''):'<small style="color:var(--mute)">Order container ships at a cargo port and ferries at a ferry terminal: they are built here, launched and sail off to their home port.</small>'}`;}
   if(s&&s.cat==='tr'){const lv=Math.min(3,b.lv||1);h+=`<p><button class="on" id="eInt" style="width:100%">Design terminal layout</button></p>
     ${`<label>Lot size · ${ldims(b)[0]} wide × ${ldims(b)[1]} deep</label><div class="chips"><button data-twd="-1,0">Narrower</button><button data-twd="1,0">Wider</button><button data-twd="0,-1">Shallower</button><button data-twd="0,1">Deeper</button></div>`}<small style="color:var(--mute)">Any size from 1 to 10 tiles each way. The street side stays where it is; the lot grows back and sideways where there is room.</small>
-    <label>Level ${lv} of 3 ${'★'.repeat(lv)}${'☆'.repeat(3-lv)}</label>${lv<3?`<ul class="newl"><li>+25% passenger capacity</li><li>More comfort</li><li>${lv===1?'Rooftop solar panels':'Taller hall with a video wall'}</li></ul><button id="eTLv" class="on" style="width:100%">Upgrade to level ${lv+1}${G.mode==='sandbox'?'':' · '+fmt(Math.round(s.cost*.5*lv))}</button>`:'<small style="color:var(--mute)">Fully upgraded.</small>'}`;}
+    <label>Level ${lv} of 3 ${'★'.repeat(lv)}${'☆'.repeat(3-lv)}</label>${lv<3?`<ul class="newl"><li>+25% passenger capacity</li>${(TRUP[b.kind]||TRUP.bus)[lv-1].map(x=>`<li>${x}</li>`).join('')}</ul><button id="eTLv" class="on" style="width:100%">Upgrade to level ${lv+1}${G.mode==='sandbox'?'':' · '+fmt(Math.round(s.cost*.5*lv))}</button>`:'<small style="color:var(--mute)">Fully upgraded.</small>'}`;}
   h+=`<label for="eName">Name</label><input type="text" id="eName" value="${(b.name||'').replace(/"/g,'&quot;')}" placeholder="Give it a name">`;
   if(isZ&&desOpen){sheet.innerHTML=`<button class="close" id="eClose">Close</button><h2>Design · ${b.name||{R:'Residence',C:'Commerce',I:'Industry'}[b.zone]}</h2><input type="text" id="eName" value="${(b.name||'').replace(/"/g,'&quot;')}" placeholder="Name this building" aria-label="Building name">`+designerHtml(t);sheet.classList.add('designer');designerWire(t);return;}
   sheet.classList.remove('designer');
@@ -3610,6 +3689,7 @@ function renderSheet(){
     h+=`<label>Architecture</label><div class="chips">${[['modern','Modern'],['classic','Classic'],['tropical','Tropical']].map(([k,n])=>`<button data-sty="${k}" class="${styleOf(b)===k?'on':''}">${n}</button>`).join('')}</div>`;
   } else if(s.cat!=='tr'){const lv=Math.min(3,b.lv||1),nx=lv<3?Math.round(s.cost*(lv===1?.6:1)):0;
     h+=`<label>Level ${lv} of 3 ${'★'.repeat(lv)}${'☆'.repeat(3-lv)}</label><div class="kv">${lv<3?`<div><b>${Math.round(s.r*LV_R[lv]*(.75+.25*(b.fund??100)/100))}</b><small>reach at level ${lv+1}</small></div><div><b>${fmt(Math.round(s.up*LV_UP[lv]*(b.fund??100)/100))}</b><small>upkeep at level ${lv+1}</small></div>`:''}</div>
+    ${lv<3&&(b.kind==='port'||b.kind==='shipyard')?`<ul class="newl"><li>${b.kind==='port'?(lv===1?'Second berth: two ships can dock and unload at once':'Outer berth with a third quay crane: three ships at once'):(lv===1?'Slipway: build two ships at the same time':'Floating dock: build three ships at the same time')}</li></ul>`:''}
     ${lv<3?`<button id="eLv" class="on" style="width:100%">Upgrade to level ${lv+1}${G.mode==='sandbox'?'':' · '+fmt(nx)}</button>`:'<small style="color:var(--mute)">Fully upgraded.</small>'}
     ${UOPT[b.kind]?UOPT[b.kind].map(([k,n,ch])=>`<label>${n}</label><div class="chips">${ch.map(c=>{const lk=c[3]>lv,on=uOpt(b,k)===c[0];return`<button data-uo="${k}:${c[0]}" class="${on?'on':''}" ${lk?'disabled':''} title="${c[2]}">${c[1]}${lk?' · level '+c[3]:''}</button>`;}).join('')}</div>${(()=>{const c=ch.find(c=>c[0]===uOpt(b,k));return c&&c[2]?`<small style="color:var(--mute)">${c[2]}</small>`:'';})()}`).join(''):''}
     <label for="eFund">Budget: <b id="eFundV">${b.fund??100}%</b> <small>(more budget = wider reach, higher upkeep)</small></label><input type="range" id="eFund" min="50" max="150" step="10" value="${b.fund??100}">`;}
@@ -3844,16 +3924,16 @@ function spr(ctx,t,cw,ch,cs,col,o){
       R(0,0,cw,u*.12,1,'#263238');R(u*.08,u*.02,cw/2-u*.1,u*.08,1,'#9fd3f0');R(cw/2+u*.02,u*.02,cw/2-u*.1,u*.08,1,'#9fd3f0');
       ctx.fillStyle='#69f0ae';for(const x of[cw*.3,cw*.7]){ctx.beginPath();ctx.moveTo(x,ch*.42);ctx.lineTo(x+u*.12,ch*.62);ctx.lineTo(x-u*.12,ch*.62);ctx.fill();}break;}
     case 'bay':{R(0,0,cw,ch,0,'#d6d2c8');R(0,0,cw,u*.1,0,'#ffd23f');for(let i=0;i<Math.round(cw/u)*4;i++)C(u*.12+i*u*.25,u*.05,u*.025,'#c9a000');R(cw*.2,ch*.45,cw*.6,u*.2,3,'#8d6e63');LN(cw*.85,ch*.3,cw*.85,ch*.7,u*.05,'#607d8b');R(cw*.78,ch*.25,u*.18,u*.12,2,'#1565c0');
-      const bw=Math.min(cw-u*.3,u*1.25),bl=u*2.9,bx=(cw-bw)/2,by=-bl-u*.15;SH(bx,by,bw,bl,u*.2);R(bx,by,bw,bl,u*.2,'#f2b705');R(bx+u*.08,by+u*.1,bw-u*.16,bl-u*.2,u*.14,'#fafafa');
+      if(!(iVeh.bay-->0))break;const bw=Math.min(cw-u*.3,u*1.25),bl=u*2.9,bx=(cw-bw)/2,by=-bl-u*.15;SH(bx,by,bw,bl,u*.2);R(bx,by,bw,bl,u*.2,'#f2b705');R(bx+u*.08,by+u*.1,bw-u*.16,bl-u*.2,u*.14,'#fafafa');
       for(let k=0;k<3;k++)R(bx+bw*.28,by+u*.4+k*u*.75,bw*.44,u*.4,3,'#cfd8dc');R(bx+u*.06,by+bl-u*.3,bw-u*.12,u*.2,u*.06,'#1d2a35');R(bx,by+bl*.5,bw,u*.1,0,'#c62828');break;}
     case 'mplat':case 'tplat':{const tr=t==='tplat';R(0,0,cw,ch,0,'#cfcac0');R(0,0,cw,u*.16,0,'#ffd23f');for(let i=0;i<cw/(u*.2);i++)C(u*.1+i*u*.2,u*.08,u*.03,'#c9a000');
       for(let i=1;i<cw/u;i+=2){C(i*u,ch*.62,u*.12,'#90a4ae');C(i*u,ch*.62,u*.08,'#b0bec5');}for(let i=0;i<cw/u-1;i+=2)R(i*u+u*.3,ch-u*.36,u*.9,u*.2,3,'#8d6e63');
       const ty=-u*1.3;R(-u*.2,ty-u*.05,cw+u*.4,u*1.2,0,'#5d554c');for(const y of[ty+u*.25,ty+u*.85])LN(-u*.2,y,cw+u*.2,y,u*.06,'#9e9e9e');for(let x=-u*.1;x<cw;x+=u*.25)LN(x,ty+u*.1,x,ty+u*1.0,u*.08,'#4e463e');
-      const cars=Math.max(1,Math.round(cw/(u*(tr?2.6:2)))),cl=cw/cars;for(let k=0;k<cars;k++){const x=k*cl+u*.06,w=cl-u*.12;SH(x,ty+u*.1,w,u*.9,u*.12);R(x,ty+u*.1,w,u*.9,u*.12,tr?(k===0?'#c62828':'#eceff1'):'#cfd8dc');R(x+u*.08,ty+u*.22,w-u*.16,u*.66,u*.08,tr?'#b0bec5':'#90a4ae');
+      if(!(iVeh.plat-->0))break;const cars=Math.max(1,Math.round(cw/(u*(tr?2.6:2)))),cl=cw/cars;for(let k=0;k<cars;k++){const x=k*cl+u*.06,w=cl-u*.12;SH(x,ty+u*.1,w,u*.9,u*.12);R(x,ty+u*.1,w,u*.9,u*.12,tr?(k===0?'#c62828':'#eceff1'):'#cfd8dc');R(x+u*.08,ty+u*.22,w-u*.16,u*.66,u*.08,tr?'#b0bec5':'#90a4ae');
         for(let j=0;j<Math.floor(w/(u*.5));j++)R(x+u*.18+j*u*.5,ty+u*.4,u*.3,u*.3,2,'#78909c');R(x,ty+u*.48,w,u*.06,0,tr?'#1565c0':'#8e24aa');}break;}
     case 'agate':{R(0,0,cw,ch,0,'#c5cdd3');R(0,0,cw,u*.08,0,'#ffd23f');R(cw*.25,ch*.55,cw*.5,u*.26,u*.05,'#37474f');R(cw*.28,ch*.58,u*.14,u*.1,2,'#4fc3f7');C(cw*.5,ch*.5,u*.08,'#2b3a55');C(cw*.5,ch*.48,u*.05,'#d4a373');
       const jx=cw/2;R(jx-u*.18,-u*1.1,u*.36,u*1.1,u*.04,'#9aa3a9');R(jx-u*.14,-u*1.1,u*.28,u*1.05,u*.03,'#c5ccd1');
-      const L=u*3.6,W=u*.42,py=-u*1.15-L,wx=jx;SH(wx-W/2,py,W,L,W/2);R(wx-W/2,py,W,L,W/2,'#f4f6f8');ctx.fillStyle='#e9edf0';ctx.beginPath();ctx.moveTo(wx-u*1.75,py+L*.48);ctx.lineTo(wx+u*1.75,py+L*.48);ctx.lineTo(wx+u*.2,py+L*.3);ctx.lineTo(wx-u*.2,py+L*.3);ctx.fill();
+      if(!(iVeh.agate-->0))break;const L=u*3.6,W=u*.42,py=-u*1.15-L,wx=jx;SH(wx-W/2,py,W,L,W/2);R(wx-W/2,py,W,L,W/2,'#f4f6f8');ctx.fillStyle='#e9edf0';ctx.beginPath();ctx.moveTo(wx-u*1.75,py+L*.48);ctx.lineTo(wx+u*1.75,py+L*.48);ctx.lineTo(wx+u*.2,py+L*.3);ctx.lineTo(wx-u*.2,py+L*.3);ctx.fill();
       ctx.beginPath();ctx.moveTo(wx-u*.7,py+u*.18);ctx.lineTo(wx+u*.7,py+u*.18);ctx.lineTo(wx+u*.12,py+u*.55);ctx.lineTo(wx-u*.12,py+u*.55);ctx.fill();for(const s of[-1,1])R(wx+s*u*.8-u*.1,py+L*.33,u*.2,u*.42,u*.08,'#b0bec5');
       R(wx-u*.05,py+u*.05,u*.1,u*.5,2,col);R(wx-W/2+u*.03,py+L-u*.38,W-u*.06,u*.14,u*.05,'#1d2a35');for(let k=0;k<10;k++)C(wx-W*.32,py+u*.8+k*u*.24,u*.025,'#455a64');break;}
   }}
@@ -3889,7 +3969,13 @@ function drawStatic(g){const L=iT.b.layout,{cs,ox,oy,r,mt,mb}=g,kind=iT.b.kind;l
   for(const o of L.objs)drawObj(ctx,o,cs,ox,oy,1,false);
   if(iLabels&&cs>=20){ctx.font=`600 ${Math.max(10,Math.min(13,cs*.34))}px Barlow Semi Condensed,sans-serif`;ctx.textBaseline='middle';ctx.textAlign='left';
     for(const o of L.objs){const lb=ILAB[o.t];if(!lb)continue;const[w,h]=oDim(o),tw=ctx.measureText(lb).width+10,X=ox+(o.x+w/2)*cs-tw/2,Y=oy+(o.y+h/2)*cs-9;ctx.fillStyle='rgba(15,30,35,.72)';rr(ctx,X,Y,tw,18,6);ctx.fill();ctx.fillStyle='#fff';ctx.fillText(lb,X+5,Y+9.5);}}}
-function drawInterior(){if(!iT)return;const c=icv(),ctx=c.getContext('2d'),L=iT.b.layout,g=iGeom(),{cs,ox,oy,dpr,r}=g;
+// vehicles shown in the floor plan: only those actually standing at this terminal right now
+let iVeh={bay:0,plat:0,agate:0};
+function vehAt(t){const b=t.b,k=b.kind;if(k==='bus')return tbuses.filter(o=>o.t===t&&(o.mode==='dwell'||o.mode==='park')).length;
+  if(k==='airport'){const F=flights.get(key(t));return F?F.list.filter(p=>p.m==='park'||p.m==='board').length:0;}
+  if(k==='train'||k==='metro'){const kk=k==='train'?'rail':'metro',cx=wx(t.x)+(LX(b)-1)/2,cz=wx(t.z)+(LZ(b)-1)/2,R2=Math.max(LX(b),LZ(b))/2+1.2;
+    return trains.filter(tr=>tr.k===kk&&tr.stopT>0&&tr.a&&Math.hypot(wx(tr.a.x)-cx,wx(tr.a.z)-cz)<R2).length;}return 0;}
+function drawInterior(){if(!iT)return;{const n=vehAt(iT);iVeh={bay:n,plat:n,agate:n};}const c=icv(),ctx=c.getContext('2d'),L=iT.b.layout,g=iGeom(),{cs,ox,oy,dpr,r}=g;
   const k=[c.width,c.height,cs.toFixed(3),ox,oy,iVer,iLabels].join();if(k!==iSKey){drawStatic(g);iSKey=k;}
   ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,c.width,c.height);ctx.drawImage(iStatic,0,0);ctx.setTransform(dpr,0,0,dpr,0,0);
   if(iSel){const[w,h]=oDim(iSel);ctx.strokeStyle='#ffd23f';ctx.lineWidth=3;ctx.setLineDash([6,4]);ctx.strokeRect(ox+iSel.x*cs+1,oy+iSel.y*cs+1,w*cs-2,h*cs-2);ctx.setLineDash([]);}
@@ -4813,7 +4899,7 @@ let hudT=0,clockMode=(()=>{try{return localStorage.getItem('metrob_clock')||'dev
 const _grey=new THREE.Color(),hazeDay=new THREE.Color(0x86a59a),haze=new THREE.Color(),_cw=new THREE.Color(0xffffff),skyDay=new THREE.Color(0xa9d3ec),skyNight=new THREE.Color(0x0b1430),skyDusk=new THREE.Color(0xf2a36b),sky=new THREE.Color();
 function resize(){renderer.setSize(innerWidth,innerHeight,false);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();postResize();}
 addEventListener('resize',resize);resize();applyGfx();
-let simErrN=0;function simErr(e){if(simErrN++<5)console.error('[sim]',e);}
+let simErrN=0;function simErr(e){if(simErrN++<5)console.error('[sim]',e&&e.stack||e);}
 function loop(now){requestAnimationFrame(loop);
   const dt=Math.min(.1,(now-last)/1000);last=now;treeLod(dt);stepCamAnim(dt);if(cat==='land'&&landTags.length)placeLandTags();{const zo=(tool==='R'||tool==='C'||tool==='I'||tool==='unzone')?.4:.11*(.35+.65*dayFnow);zoneOvMat.opacity+=(zo-zoneOvMat.opacity)*Math.min(1,dt*8);}
   if(G&&$('menu').classList.contains('hide'))try{
