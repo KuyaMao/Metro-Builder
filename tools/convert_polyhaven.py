@@ -11,7 +11,7 @@ os.makedirs(OUT, exist_ok=True)
 # which download feeds which game surface. Each slot: (asset, size, target mean brightness or None, desaturate 0..1)
 SURF = {  # slot: (asset, colour size, normal size, target mean brightness or None, desaturate 0..1)
     'road':  ('asphalt_02', 2048, 2048, 'raw', 0),            # the player's choice; true colours, the game draws them untinted
-    'walk':  ('pavement_06', 2048, 1024, 'raw', 0),            # interlocking brick pavers
+    'walk':  ('gravel_embedded_concrete', 1024, 1024, .7, .6),  # light exposed-aggregate concrete (scored joints added below)
     'plaza': ('brushed_concrete_04', 1024, 1024, None, 0),
     'grass': ('rocky_terrain_02', 2048, 1024, None, 0),
     'grass2':('grass_ground', 1024, 512, None, 0),
@@ -88,6 +88,9 @@ for slot, (asset, n, nn, target, desat) in SURF.items():
     if target:
         if target != 'raw': col = neutral(col, target, desat)
         mu = col.mean((0, 1)); col = mu + (col - mu) * 1.25   # the game sees these from far away: keep the grain readable
+    if slot == 'walk':   # scored control joints at the texture edge (one slab per repeat)
+        mu = col.mean((0, 1)); col = mu + (col - mu) * .45   # fine aggregate reads calm from above
+        w = max(2, n // 200); col[:w] *= .7; col[:, :w] *= .7
     save(col, f'ph_{slot}_col')
     if 'nor_gl' in m: save(resize(load(m['nor_gl']), nn), f'ph_{slot}_nrm', 90)
     if 'rough' in m: save(resize(load(m['rough'], True), n // 2), f'ph_{slot}_rgh')
