@@ -844,8 +844,33 @@ const MK_BRICK=[0x7a4434,0x8c5a44,0x6b3b30,0x9a7a62,0x5e4a44,0xa48a70];
 function mkParts(b,k){const P={res:[],brk:[],glass:[],ind:[],det:[],lit:[]},br=MK_BRICK[Math.floor(hrand(b,93)*MK_BRICK.length)];
   P.det.push([RB(.98,.004,.98,0,0,0),0xb8b2a6]);P.det.push([modelG(k,{map:{'705040':br,'808078':shade(br,1.25)}}),null]);
   const fp=k==='mk_large'?.68:k==='mk_medium'?.55:.5;P.det.push([RB(.09,.004,.5-fp/2,0,.001,.25+fp/4),0xcfc9bd]);return P;}
+/* Kenney City Kit buildings (CC0, kenney.nl): suburban houses, commercial blocks and skyscrapers, industrial sheds.
+   1 kit unit = 10 m. Setting kenMode: off | mix (about half the lots) | all (every zoned lot, one model per tile). */
+let kenMode=(()=>{try{return localStorage.getItem('metrob_kenney')||'mix';}catch(e){return 'mix';}})();
+const kWinC=c=>{const r=parseInt(c.slice(0,2),16),g=parseInt(c.slice(2,4),16),b=parseInt(c.slice(4,6),16);return b>=170&&b-r>=50&&b-g>=20;};
+const kWinMat=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.25,metalness:.35,emissive:0x8a6c40,emissiveIntensity:0});winMats.push(kWinMat);
+const KEN_U=.4,_kl={},KEN_ROOF={R:[0x9c4a36,0x7a3b2e,0x3f4a55,0x5a5f66,0xa67c52,0x5f7f9a,0x58b888],C:[0x4a525c,0x3f4a55,0x6b5d52,0x58b888],I:[0x6e7f8a,0x8a7f6e,0x5a5f66,0x9aa0a6]};
+// per-lot colours: the kit's mint roofs/trim take a roof colour, its white walls take a light version of the lot colour
+function kenMap(k,roof,wall){const M=MODELPACK[k],m={},W=new THREE.Color(wall),Rf=new THREE.Color(roof),hsl={};
+  for(const g of M.g){if(m[g.c]!=null)continue;const c=new THREE.Color(parseInt(g.c,16));c.getHSL(hsl);
+    if(hsl.h>.36&&hsl.h<.46&&hsl.s>.3)m[g.c]=Rf.clone().multiplyScalar(.55+hsl.l*.75).getHex();
+    else if(hsl.s<.25&&hsl.l>.72)m[g.c]=new THREE.Color(1,1,1).lerp(W,.55).multiplyScalar(.75+hsl.l*.25).getHex();}
+  return m;}
+function kenList(z,lv){const k=z+lv;if(_kl[k])return _kl[k];const ks=Object.keys(window.MODELPACK||{}),f=p=>ks.filter(n=>p.test(n));
+  return _kl[k]=z==='I'?f(/^ki_/):z==='R'?(lv===1?f(/^ks_/):lv===2?f(/^kc_[a-h]$/):f(/^kc_skyscraper/)):(lv===1?f(/^kc_[a-h]$/):lv===2?f(/^kc_[e-n]$/):f(/^kc_skyscraper/));}
+function kenUse(b){if(kenMode==='off'||b.des||!b.zone||!'RCI'.includes(b.zone)||!window.MODELPACK||!MODELPACK.ks_type_a)return false;return kenMode==='all'||hrand(b,131)<.5;}
+function kenParts(b){const P={res:[],brk:[],glass:[],ind:[],det:[],lit:[],kwin:[]},Lw=qturn(b)?LZ(b):LX(b),Ld=qturn(b)?LX(b):LZ(b),L=kenList(b.zone,Math.min(3,b.level||1));if(!L.length)return null;
+  const lawn=b.zone==='R'&&(b.level||1)===1;
+  for(let i=0;i<Lw;i++)for(let j=0;j<Ld;j++){const k=L[Math.floor(hrand(b,140+i*7+j)*L.length)],bx=modelBox(k).map(v=>v/MODEL_U),s=Math.min(KEN_U,.92/bx[0],.92/bx[2]),ox=i-(Lw-1)/2,oz=j-(Ld-1)/2,dz=bx[2]*s;
+    P.det.push([RB(.98,.004,.98,ox,0,oz),lawn?0x5d7f3c:b.zone==='I'?0x9a968c:0xb8b2a6]);
+    const zo=oz+(j===Ld-1?Math.max(0,.46-dz/2)*(lawn?.35:.8):0);
+    if(lawn&&j===Ld-1)P.det.push([RB(.08,.005,.5-(zo-oz)-dz/2,ox,.001,oz+(.5+(zo-oz)+dz/2)/2),0xcfc9bd]);
+    const RL=KEN_ROOF[b.zone],map=kenMap(k,RL[Math.floor(hrand(b,150+i*7+j)*RL.length)],new THREE.Color(b.color||'#e9e4d8').getHex()),g=modelG(k,{u:s,f:'body',map}),w=modelG(k,{u:s,f:'win'});
+    if(g)P.det.push([g.translate(ox,.004,zo),null]);if(w)P.kwin.push([w.translate(ox,.004,zo),null]);}
+  return P;}
 function buildingParts(b){
   if(b.des&&b.d)return designParts(b);
+  if(kenUse(b)){const kp=kenParts(b);if(kp)return kp;}
   {const mk=mkModel(b);if(mk)return mkParts(b,mk);}
   const P={res:[],brk:[],glass:[],ind:[],det:[],lit:[]};const st=styleOf(b);
   const col=new THREE.Color(b.color).getHex(),f=Math.max(1,b.floors|0),fp=b.fp,H=f*FLOOR,lv=b.level;
@@ -946,9 +971,9 @@ const _mg={};
 // a model as one geometry (vertex colours from each material), base centred on the origin, in world units
 function modelG(k,opt={}){const key=k+JSON.stringify(opt);if(_mg[key])return _mg[key].clone();const M=window.MODELPACK&&window.MODELPACK[k];if(!M)return null;
   const b=M.b,cx=(b[0]+b[3])/2,cz=(b[2]+b[5])/2,y0=b[1],P=[];
-  for(const g of M.g){const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(g.p,3));if(g.n)geo.setAttribute('normal',new THREE.Float32BufferAttribute(g.n,3));else geo.computeVertexNormals();{const nn=geo.attributes.normal.array;for(let i=0;i<nn.length;i+=3){const l=Math.hypot(nn[i],nn[i+1],nn[i+2]);if(!(l>1e-4)){nn[i]=0;nn[i+1]=1;nn[i+2]=0;}}}
-    geo.translate(-cx,-y0,-cz);geo.scale(MODEL_U,MODEL_U*(opt.sy||1),MODEL_U);if(opt.ry)geo.rotateY(opt.ry);P.push([geo,opt.col!=null?opt.col:opt.map&&opt.map[g.c]!=null?opt.map[g.c]:parseInt(g.c,16)]);}
-  const m=mergeG(P,true);for(const[gg]of P)gg.dispose();_mg[key]=m;return m.clone();}
+  for(const g of M.g){if(opt.f&&(opt.f==='win')!==kWinC(g.c))continue;const geo=new THREE.BufferGeometry();let pp=g.p;if(g.i){const sc=M.q?.001:1;pp=new Float32Array(g.i.length*3);for(let j=0;j<g.i.length;j++){const v=g.i[j]*3;pp[j*3]=g.p[v]*sc;pp[j*3+1]=g.p[v+1]*sc;pp[j*3+2]=g.p[v+2]*sc;}}geo.setAttribute('position',new THREE.Float32BufferAttribute(pp,3));if(g.n)geo.setAttribute('normal',new THREE.Float32BufferAttribute(g.n,3));else geo.computeVertexNormals();{const nn=geo.attributes.normal.array;for(let i=0;i<nn.length;i+=3){const l=Math.hypot(nn[i],nn[i+1],nn[i+2]);if(!(l>1e-4)){nn[i]=0;nn[i+1]=1;nn[i+2]=0;}}}
+    geo.translate(-cx,-y0,-cz);{const U=opt.u||MODEL_U;geo.scale(U,U*(opt.sy||1),U);}if(opt.ry)geo.rotateY(opt.ry);P.push([geo,opt.col!=null?opt.col:opt.map&&opt.map[g.c]!=null?opt.map[g.c]:parseInt(g.c,16)]);}
+  if(!P.length)return null;const m=mergeG(P,true);for(const[gg]of P)gg.dispose();_mg[key]=m;return m.clone();}
 const modelH=k=>{const M=window.MODELPACK&&window.MODELPACK[k];return M?(M.b[4]-M.b[1])*MODEL_U:0;};
 function worldUV(g,k){const p=g.attributes.position,u=g.attributes.uv;if(!u)return;for(let i=0;i<p.count;i++)u.setXY(i,p.getX(i)*k,p.getZ(i)*k);u.needsUpdate=true;}
 // flat, upward-facing quad with world-space UVs (so the asphalt grain lines up across tiles)
@@ -958,6 +983,7 @@ const asp0=t=>t.rt==='h'?RCOL.hasp:RCOL.asp;
 const RCOL={asp:0x46494e,hasp:0x4b4d51,walk:0xbfbab0,joint:0xa39e94,curb:0xd2cdc2,verge:0x6c9a4c,yel:0xf0cd45,wht:0xeeeeea,bike:0x3f9a5a,med:0x6a9c4a,bar:0xc9c5bc,rail:0xb6bbc0,pit:0x5b4632};
 const DASH=[[-.45,-.33],[-.2,-.08],[.05,.17],[.3,.42]];
 function roadParts(t,out){const i0=out.road.length,j0=out.bdet?out.bdet.length:0;roadParts0(t,out);if(t.ix==='slip'&&slipInfo(t))slipParts(t,out);
+  if(t.cv&&t.cvi===0&&G.curves[t.cv]){const c=G.curves[t.cv];for(const k of[c.A,c.B]){const E=G.tiles[k];if(E&&E.ix==='slip'&&slipInfo(E)){const L=slipLanes(E);clipOut(out,i0,j0,(x,z)=>L.every(q=>q.dist(x,z)>SLIP_W+.012));}}}
   if(t.road&&!t.cv)for(const[dx,dz]of[[1,0],[-1,0],[0,1],[0,-1]]){const J=T(t.x+dx,t.z+dz);if(!J)continue;
     if(J.ix==='rbig'&&rbInfo(J)){const cx=wx(J.x),cz=wx(J.z),rc=RB_R+RB_W+.012;clipOut(out,i0,j0,(x,z)=>Math.hypot(x-cx,z-cz)>rc);}
     else if(J.ix==='slip'&&slipInfo(J)){const L=slipLanes(J);clipOut(out,i0,j0,(x,z)=>L.every(q=>q.dist(x,z)>SLIP_W+.012));}}
@@ -1275,7 +1301,26 @@ const CONN_SPLIT=[0,.36,.68,1];
 /* diamond interchange: every turn uses a one-lane slip ramp in a corner. Exits leave the highway before the bridge and meet the
    crossing road at a ramp terminal on its approach slope (turn right there, or left across and over the bridge); entries leave the
    crossing road after the bridge and merge into the highway. Paths run over three tiles: entry tile, junction, exit tile. */
-const _diaC={},DIA_T=1.24;
+const _diaC={},DIA_T=1.24,DB_R=.26;
+/* dumbbell interchange: the diamond's two ramp terminals are roundabouts on the crossing road (centred DIA_T from the bridge).
+   Every movement through it (turns and the crossing road's straight traffic) goes round them. */
+const _dbC={};
+function dbPath(J,X,Y,o){const I=ichgInfo(J);if(!I)return null;const ck=key(J)+'|'+key(X)+'|'+key(Y)+'|'+Math.abs(o).toFixed(3);if(_dbC[ck])return _dbC[ck];
+  const cx=wx(J.x),cz=wx(J.z),a=I.hx===1?[0,1]:[1,0],hX=(x,z)=>diaH(Math.abs((x-cx)*a[0]+(z-cz)*a[1])),sideOf=t=>Math.sign((t.x-J.x)*a[0]+(t.z-J.z)*a[1]),Cen=s=>[cx+a[0]*s*DIA_T,cz+a[1]*s*DIA_T];
+  const P=[],pt=(x,z,h)=>P.push([x,z,h==null?hX(x,z):h]),o2=Math.min(Math.abs(o),.2),eD=DB_R+.2;
+  const ring=(s,vin,vout)=>{const C=Cen(s),ti=Math.atan2(vin[1],vin[0]),to=Math.atan2(vout[1],vout[0]);let dl=ti-to;while(dl<=.7)dl+=2*Math.PI;const ri=rgt([-vin[0],-vin[1]]);
+    pt(C[0]+vin[0]*(DB_R+.16)+ri[0]*.04,C[1]+vin[1]*(DB_R+.16)+ri[1]*.04);const a0=ti-.5,a1=ti-dl+.5,n=Math.max(2,Math.ceil((a0-a1)/.3));for(let i=0;i<=n;i++){const an=a0+(a1-a0)*i/n;pt(C[0]+Math.cos(an)*DB_R,C[1]+Math.sin(an)*DB_R);}
+    const ro=rgt(vout);pt(C[0]+vout[0]*(DB_R+.16)+ro[0]*.04,C[1]+vout[1]*(DB_R+.16)+ro[1]*.04);};
+  const arm=(s,inn)=>{const v=[a[0]*s,a[1]*s],r=inn?rgt([-v[0],-v[1]]):rgt(v),x=cx+v[0]*1.5+r[0]*o2,z=cz+v[1]*1.5+r[1]*o2;pt(x,z,diaH(1.5));};
+  const ramp=(D,s,on)=>{const R2=[a[0]*s,a[1]*s];let L=diaOff(Math.min(Math.abs(o),.45),eD,diaH(DIA_T));if(on)L=L.map(([d,r,h])=>[-d,r,h]).reverse();const W=L.map(([d,r,h])=>[cx+D[0]*d+R2[0]*r,cz+D[1]*d+R2[1]*r,h]);return on?W.slice(1):W.slice(0,-1);};
+  const dirOf=t=>[t.x-J.x,t.z-J.z],sideR=D=>Math.sign(rgt(D)[0]*a[0]+rgt(D)[1]*a[1]);
+  if(X.rt==='h'){const D=[J.x-X.x,J.z-X.z],s=sideR(D);P.push(...ramp(D,s,false));const sy=sideOf(Y);
+    if(sy===s){ring(s,[-D[0],-D[1]],[a[0]*s,a[1]*s]);arm(s,false);}else{ring(s,[-D[0],-D[1]],[-a[0]*s,-a[1]*s]);ring(-s,[a[0]*s,a[1]*s],[-a[0]*s,-a[1]*s]);arm(-s,false);}}
+  else{const sx=sideOf(X);arm(sx,true);
+    if(Y.rt==='h'){const E=dirOf(Y),sE=sideR(E);if(sE===sx)ring(sx,[a[0]*sx,a[1]*sx],E);else{ring(sx,[a[0]*sx,a[1]*sx],[-a[0]*sx,-a[1]*sx]);ring(-sx,[a[0]*sx,a[1]*sx],E);}P.push(...ramp(E,sE,true));}
+    else{ring(sx,[a[0]*sx,a[1]*sx],[-a[0]*sx,-a[1]*sx]);ring(-sx,[a[0]*sx,a[1]*sx],[-a[0]*sx,-a[1]*sx]);arm(-sx,false);}}
+  const pts=crSample(P,6),W=pts.map(p=>[p[0],p[1]]),H=pts.map(p=>Math.max(0,p[2])),S=[0];for(let i=1;i<W.length;i++)S.push(S[i-1]+Math.hypot(W[i][0]-W[i-1][0],W[i][1]-W[i-1][1]));
+  return _dbC[ck]={W,S,L:S[S.length-1],H,ox:o2,ex:X.rt==='h'};}
 const diaH=r=>ICH_H*clamp((2.5-Math.abs(r))/2,0,1);
 const diaOff=(oh,e,hT)=>[[-1.5,oh,0],[-1.36,oh+.04,0],[-1.2,.6,.004],[-1.04,.8,hT*.18],[-.88,.98,hT*.42],[-.72,1.12,hT*.68],[-.58,DIA_T-.02,hT*.9],[-e-.04,DIA_T,hT],[-e,DIA_T,hT]];
 function crSample(P,k){const pts=[],n=P.length;for(let i=0;i<n-1;i++){const a=P[Math.max(0,i-1)],b0=P[i],c=P[i+1],d=P[Math.min(n-1,i+2)];for(let q=0;q<k;q++){const t=q/k,t2=t*t,t3=t2*t;pts.push(b0.map((_,j)=>.5*((2*b0[j])+(-a[j]+c[j])*t+(2*a[j]-5*b0[j]+4*c[j]-d[j])*t2+(-a[j]+3*b0[j]-3*c[j]+d[j])*t3)));}}pts.push(P[n-1].slice());return pts;}
@@ -1295,12 +1340,17 @@ function diaPath(J,X,Y,o){const I=ichgInfo(J);if(!I)return null;const xg=roadGeo
 function connAt(Q,u){const s=clamp(u,0,1)*Q.L;let i=1;while(i<Q.S.length-1&&Q.S[i]<s)i++;const f=(s-Q.S[i-1])/Math.max(1e-6,Q.S[i]-Q.S[i-1]),A=Q.W[i-1],B=Q.W[i];
   _pp.x=A[0]+(B[0]-A[0])*f;_pp.z=A[1]+(B[1]-A[1])*f;const tx=B[0]-A[0],tz=B[1]-A[1],l=Math.hypot(tx,tz)||1;_pp.tx=tx/l;_pp.tz=tz/l;_ppH=Q.H?Q.H[i-1]+(Q.H[i]-Q.H[i-1])*f:0;return _pp;}
 const isClover=J=>J&&((J.ix==='ichg'&&!!ichgInfo(J))||(J.ix==='rbig'&&!!rbInfo(J))||(J.ix==='slip'&&!!slipInfo(J)));
-const isRightOf=(J,X,Y)=>J.ix==='slip'?(Y.x-J.x===-(J.z-X.z)&&Y.z-J.z===J.x-X.x):J.ix==='rbig'?X!==Y:X!==Y&&!(Y.x-J.x===J.x-X.x&&Y.z-J.z===J.z-X.z)&&(X.rt==='h')!==(Y.rt==='h');
-const conPath=(J,X,Y,o)=>J.ix==='rbig'?rbPath(J,X,Y,o):J.ix==='slip'?slipPath(J,X,Y,o):diaPath(J,X,Y,o);
+const isRightOf=(J,X,Y)=>J.ix==='ichg'&&J.ixv==='d'?X!==Y&&!(X.rt==='h'&&Y.rt==='h'):J.ix==='slip'?(Y.x-J.x===-(J.z-X.z)&&Y.z-J.z===J.x-X.x):J.ix==='rbig'?X!==Y:X!==Y&&!(Y.x-J.x===J.x-X.x&&Y.z-J.z===J.z-X.z)&&(X.rt==='h')!==(Y.rt==='h');
+const conPath=(J,X,Y,o)=>J.ix==='ichg'&&J.ixv==='d'?dbPath(J,X,Y,o):J.ix==='rbig'?rbPath(J,X,Y,o):J.ix==='slip'?slipPath(J,X,Y,o):diaPath(J,X,Y,o);
 /* ---------- slip-lane junction: right turns leave before the junction on their own lane round the corner, behind a kerbed island ---------- */
 const SLIP_W=.075;
+// why a slip-lane junction or large roundabout can't go on this tile
+function ixWhy(t){const L=ixOpt==='slip'?'Slip lanes':'A large roundabout';if(!t||!t.road||t.cv)return 'Tap the junction tile itself, where three or four roads meet';if(!isJn(t))return 'That is not a junction: tap where three or four roads meet';
+  if(t.water)return L+' can\'t go on a bridge';const nb=roadNeighbors(t);if(ixOpt==='slip'&&(t.rt==='h'||nb.some(n=>n.rt==='h')))return 'Slip lanes are for streets, avenues and boulevards – for an expressway use the Diamond interchange';  if(nodeArms(t))return L+' need the roads to meet at right angles (this junction has a road at an angle)';if(nb.some(n=>n.water))return L+' can\'t touch a bridge';if(nb.some(n=>n.ix==='ichg'||n.ix==='rbig'||n.ix==='slip'))return 'Too close to another interchange or roundabout';
+  if(ixOpt==='rbig'){if(nb.some(n=>n.cv))return 'A large roundabout needs straight roads on every side (not curves)';return 'A large roundabout needs the four corner tiles clear (no buildings, roads or rail)';}
+  return 'Slip lanes can\'t go here';}
 function slipMoves(J){const nb=roadNeighbors(J),r=[];for(const X of nb){const hx=J.x-X.x,hz=J.z-X.z,Y=nb.find(n=>n.x-J.x===-hz&&n.z-J.z===hx);if(Y)r.push([X,Y]);}return r;}
-function slipInfo(J,check){if(!J||!J.road||J.water||J.cv||J.rt==='h'||!isJn(J))return null;const nb=roadNeighbors(J);if(nb.length<3||nb.some(n=>n.rt==='h'||n.water||n.cv||n.ix==='ichg'||n.ix==='rbig'||n.ix==='slip'))return null;
+function slipInfo(J,check){if(!J||!J.road||J.water||J.cv||J.rt==='h'||!isJn(J)||nodeArms(J))return null;const nb=roadNeighbors(J);if(nb.length<3||nb.some(n=>n.rt==='h'||n.water||n.ix==='ichg'||n.ix==='rbig'||n.ix==='slip'))return null;
   const mv=slipMoves(J),corners=mv.map(([X,Y])=>T(X.x+Y.x-J.x,X.z+Y.z-J.z)),free=corners.every(c=>c&&owned(c)&&!c.road&&!c.b&&c.ref==null&&!c.rail&&!c.runway&&!c.water&&!c.cv&&!c.cvo&&(!c.icv||c.icv===key(J)));
   if(!mv.length)return null;
   // with buildings on the corners the slip lanes tuck into the junction and arm tiles (compact)
@@ -1393,7 +1443,7 @@ function ichgParts(J,I,out){const X=wx(J.x),Z=wx(J.z),ew=I.hx===1,Xr=I.X[0],xg=r
   // single span: no piers in the highway; the deck rests on abutment walls at the tile edges
   for(const v of[-1,1]){dk(v*.5-v*.025,v*.5+v*.012,-W-.02,W+.02,0,y-.05,0xbab4a9);dk(v*.5-v*.04,v*.5-v*.02,-W,W,y-.07,.02,0xa39d92);}
   if(Xr.rt==='s')q(-.009,.009,-.5,.5,y+.0012,RCOL.yel);else for(const sg of[-1,1])q(sg*.011-.0045,sg*.011+.0045,-.5,.5,y+.0012,RCOL.yel);
-  if(I.stub){const S=I.stub,v=[S.x-J.x,S.z-J.z],pp=[-v[1],v[0]],E=Cc+sw,Q=(s2,l)=>[X+v[0]*s2+pp[0]*l,Z+v[1]*s2+pp[1]*l],L1=DIA_T+.2,n=10,yA=s2=>.012+diaH(s2);
+  if(I.stub){const S=I.stub,v=[S.x-J.x,S.z-J.z],pp=[-v[1],v[0]],E=Cc+sw,Q=(s2,l)=>[X+v[0]*s2+pp[0]*l,Z+v[1]*s2+pp[1]*l],L1=J.ixv==='d'?DIA_T+DB_R+.14:DIA_T+.2,n=10,yA=s2=>.012+diaH(s2);
     const strip=(l0,l1,dy,col,s0=.5,s1=L1)=>{const pos=[];for(let i=0;i<n;i++){const a=s0+(s1-s0)*i/n,b=s0+(s1-s0)*(i+1)/n,A0=Q(a,l0),A1=Q(a,l1),B0=Q(b,l0),B1=Q(b,l1),ya=yA(a)+dy,yb=yA(b)+dy;pos.push(A0[0],ya,A0[1],A1[0],ya,A1[1],B1[0],yb,B1[1],A0[0],ya,A0[1],B1[0],yb,B1[1],B0[0],yb,B0[1]);}P(upGeo(pos),col);};
     strip(-Cc,Cc,.0005,RCOL.asp);if(sw>0)for(const sg of[-1,1]){strip(sg>0?Cc:-E,sg>0?E:-Cc,.006,RCOL.walk);}strip(-.009,.009,.0012,RCOL.yel,.5,L1-.12);
     // retaining walls (open where the ramps join) and a crash wall at the end
@@ -1402,10 +1452,11 @@ function ichgParts(J,I,out){const X=wx(J.x),Z=wx(J.z),ew=I.hx===1,Xr=I.X[0],xg=r
     {const A=Q(L1,-E-.01),B=Q(L1,E+.01),h=yA(L1)+.03,g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(new Float32Array([A[0],0,A[1],B[0],0,B[1],B[0],h,B[1],A[0],0,A[1],B[0],h,B[1],A[0],h,A[1]]),3));g.computeVertexNormals();D(g,0xbdb7ac);
       for(let l=-Cc+.02;l<Cc;l+=.05){const c0=Q(L1-.03,l),c1=Q(L1-.03,l+.025);D(new THREE.BoxGeometry(.012,.02,.012).translate((c0[0]+c1[0])/2,yA(L1)+.01,(c0[1]+c1[1])/2),l<0?0xd32f2f:0xf2f2f2);}}}
   // diamond ramps: one per corner; each highway direction has its off-ramp before the bridge and its on-ramp after it, both on its right
-  for(const Hb of I.H){const dx0=J.x-Hb.x,dz0=J.z-Hb.z,rx=-dz0,rz=dx0,e=Cc+.03,off=crSample(diaOff(.44,e,diaH(DIA_T)),10),w=.1;
+  const DBL=J.ixv==='d';
+  for(const Hb of I.H){const dx0=J.x-Hb.x,dz0=J.z-Hb.z,rx=-dz0,rz=dx0,e=DBL?DB_R+.2:Cc+.03,off=crSample(diaOff(.44,e,diaH(DIA_T)),10),w=.1;
     for(const ramp of[off,off.map(([d,r,h])=>[-d,r,h]).reverse()]){const L=[],Rr=[],Hs=[],Lw=[],Rw=[];
       for(let i=0;i<ramp.length;i++){const[d,r,h]=ramp[i];if(r<.36)continue;const j0=Math.max(0,i-1),j1=Math.min(ramp.length-1,i+1),td=ramp[j1][0]-ramp[j0][0],tr=ramp[j1][1]-ramp[j0][1],l=Math.hypot(td,tr)||1,nd=-tr/l,nr=td/l;
-        const fl=1+.9*clamp((Math.abs(d)-(Cc+.18))/-.15,0,1),ww=w*fl,lift=Math.abs(d)<Cc+sw+.1?.0068*clamp((Cc+sw+.1-Math.abs(d))/.06,0,1):0,pt=(dd,rr)=>[X+dx0*dd+rx*rr,Z+dz0*dd+rz*rr];const rin=Math.max(r-nr*ww,.47);L.push(pt(d+nd*ww,r+nr*ww));Rr.push(pt(d-nd*ww,r-nr*ww<.47?rin:r-nr*ww));Lw.push(pt(d+nd*(ww-.012),r+nr*(ww-.012)));Rw.push(pt(d-nd*(ww-.012),r-nr*(ww-.012)));Hs.push(.012+h+(h<.003&&r<.62?.0002:.0016)+lift);}
+        const fl=DBL?1:1+.9*clamp((Math.abs(d)-(Cc+.18))/-.15,0,1),ww=w*fl,lift=Math.abs(d)<Cc+sw+.1?.0068*clamp((Cc+sw+.1-Math.abs(d))/.06,0,1):0,pt=(dd,rr)=>[X+dx0*dd+rx*rr,Z+dz0*dd+rz*rr];const rin=Math.max(r-nr*ww,.47);L.push(pt(d+nd*ww,r+nr*ww));Rr.push(pt(d-nd*ww,r-nr*ww<.47?rin:r-nr*ww));Lw.push(pt(d+nd*(ww-.012),r+nr*(ww-.012)));Rw.push(pt(d-nd*(ww-.012),r-nr*(ww-.012)));Hs.push(.012+h+(h<.003&&r<.62?.0002:.0016)+lift);}
       if(L.length<2)continue;const tri=(A,B,col,dy=0,wall)=>{const pos=[];for(let i=0;i<A.length-1;i++){const y0=Hs[i]+dy,y1=Hs[i+1]+dy;if(wall){const b0=.012,b1=.012;pos.push(A[i][0],b0,A[i][1],A[i+1][0],b1,A[i+1][1],A[i+1][0],y1,A[i+1][1],A[i][0],b0,A[i][1],A[i+1][0],y1,A[i+1][1],A[i][0],y0,A[i][1]);}
           else pos.push(A[i][0],y0,A[i][1],B[i][0],y0,B[i][1],B[i+1][0],y1,B[i+1][1],A[i][0],y0,A[i][1],B[i+1][0],y1,B[i+1][1],A[i+1][0],y1,A[i+1][1]);}
         if(!pos.length)return;const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(pos),3));if(wall){g.computeVertexNormals();}else{const nr2=new Float32Array(pos.length);for(let i=1;i<nr2.length;i+=3)nr2[i]=1;g.setAttribute('normal',new THREE.BufferAttribute(nr2,3));
@@ -1415,6 +1466,11 @@ function ichgParts(J,I,out){const X=wx(J.x),Z=wx(J.z),ew=I.hx===1,Xr=I.X[0],xg=r
     // stop line where the off-ramp meets the crossing road
     {const d=-(e+.02),pt=(dd,rr)=>[X+dx0*dd+rx*rr,Z+dz0*dd+rz*rr],a2=pt(d,DIA_T-w+.01),b2=pt(d-.014,DIA_T+w-.01),hy=.012+diaH(DIA_T)+.0024+.0068;P(HQ(Math.min(a2[0],b2[0]),Math.min(a2[1],b2[1]),Math.max(a2[0],b2[0]),Math.max(a2[1],b2[1]),hy),RCOL.wht);}}
   // grass on the corner land the loops use
+  if(DBL){// the two terminal roundabouts, following the approach slope
+    const a=ew?[0,1]:[1,0],hX=(x,z)=>.012+diaH(Math.abs((x-X)*a[0]+(z-Z)*a[1])),N=40;
+    for(const s of[-1,1]){const C=[X+a[0]*s*DIA_T,Z+a[1]*s*DIA_T],band=(r0,r1,dy,col)=>{const pos=[];for(let i=0;i<N;i++){const t0=i/N*2*Math.PI,t1=(i+1)/N*2*Math.PI,p=(r,t)=>[C[0]+Math.cos(t)*r,C[1]+Math.sin(t)*r];const A0=p(r0,t0),A1=p(r0,t1),B0=p(r1,t0),B1=p(r1,t1),y=q=>hX(q[0],q[1])+dy;pos.push(A0[0],y(A0),A0[1],B0[0],y(B0),B0[1],B1[0],y(B1),B1[1],A0[0],y(A0),A0[1],B1[0],y(B1),B1[1],A1[0],y(A1),A1[1]);}P(upGeo(pos),col);};
+      band(DB_R-.095,DB_R+.095,.0068,RCOL.asp);band(DB_R+.077,DB_R+.083,.0072,RCOL.wht);band(DB_R-.083,DB_R-.077,.0072,RCOL.wht);band(DB_R-.11,DB_R-.095,.0095,RCOL.curb);band(0,DB_R-.11,.0092,0x3e5c2a);
+      out.bdet.push([new THREE.IcosahedronGeometry(.05,0).scale(1,.8,1).translate(C[0],hX(C[0],C[1])+.05,C[1]),0x3f7a35]);}}
   /* corner land keeps the natural ground */}
 function approachMarks(t,ns,C,r,hw,q,ym){const Q=(u0,v0,u1,v1,c)=>ns?q(v0,u0,v1,u1,ym,c):q(u0,v0,u1,v1,ym,c),lanes=r.lo||[r.lanes>1?.07:.085];
   for(const d of[1,-1]){const n=ns?T(t.x,t.z+d):T(t.x+d,t.z);if(!isJn(n))continue;
@@ -1476,7 +1532,7 @@ function placeParts(P,t,out){const sx=(LX(t.b)-1)/2,sz=(LZ(t.b)-1)/2;_bm.makeRot
   for(const k in P)for(const[g,c]of P[k]){g.applyMatrix4(_bq);out[k].push([g,c]);}}
 function partsMeshes(out,parent){const list=[];
   const add=(k,mt,shadow)=>{if(!out[k]||!out[k].length)return;const g=mergeG(out[k],true);for(const[gg]of out[k])gg.dispose();const m=new THREE.Mesh(g,mt);m.castShadow=shadow;m.receiveShadow=true;parent.add(m);list.push(m);};
-  add('ao',aoDecalMat,false);  add('res',WALL.res,true);add('brk',WALL.brk,true);add('glass',WALL.glass,true);add('ind',WALL.ind,true);add('det',bDetMat,true);add('lit',bLitMat,false);if(out.road&&out.road.length){const wk=[],rd=[];for(const e of out.road)(e[1]===RCOL.walk?wk:rd).push(e);out.road=rd;if(wk.length){const g=mergeG(wk,true);for(const[gg]of wk)gg.dispose();worldUV(g,4);const m=new THREE.Mesh(g,walkMat);m.receiveShadow=true;parent.add(m);list.push(m);}}
+  add('ao',aoDecalMat,false);  add('res',WALL.res,true);add('brk',WALL.brk,true);add('glass',WALL.glass,true);add('ind',WALL.ind,true);add('det',bDetMat,true);add('kwin',kWinMat,true);add('lit',bLitMat,false);if(out.road&&out.road.length){const wk=[],rd=[];for(const e of out.road)(e[1]===RCOL.walk?wk:rd).push(e);out.road=rd;if(wk.length){const g=mergeG(wk,true);for(const[gg]of wk)gg.dispose();worldUV(g,4);const m=new THREE.Mesh(g,walkMat);m.receiveShadow=true;parent.add(m);list.push(m);}}
   if(out.sand&&out.sand.length){const g=mergeG(out.sand,true);for(const[gg]of out.sand)gg.dispose();worldUV(g,1.2);const m=new THREE.Mesh(g,sandMat);m.receiveShadow=true;parent.add(m);list.push(m);}
   // road paint, kerbs and barriers are not drawn with the asphalt texture (it would darken the markings)
   if(out.road&&out.road.length&&roadBatchMat.map&&RCOL.asp===0xffffff){out.paint=out.road.filter(e=>e[1]!==RCOL.asp&&e[1]!==RCOL.hasp);out.road=out.road.filter(e=>e[1]===RCOL.asp||e[1]===RCOL.hasp);add('paint',paintRoadMat,false);}
@@ -1484,7 +1540,7 @@ function partsMeshes(out,parent){const list=[];
   return list;}
 function markDirty(t){const c=chunks[Math.floor(t.z/CH)*NC+Math.floor(t.x/CH)];if(c)c.dirty=true;}
 function rebuildChunk(ci){
-  if(!G)return;const C=chunks[ci];C.dirty=false;for(const m of C.meshes){scene.remove(m);m.geometry.dispose();}C.meshes=[];const cx=ci%NC,cz=Math.floor(ci/NC),out={res:[],brk:[],glass:[],ind:[],det:[],lit:[],road:[],zone:[],bdet:[]};
+  if(!G)return;const C=chunks[ci];C.dirty=false;for(const m of C.meshes){scene.remove(m);m.geometry.dispose();}C.meshes=[];const cx=ci%NC,cz=Math.floor(ci/NC),out={res:[],brk:[],glass:[],ind:[],det:[],lit:[],kwin:[],road:[],zone:[],bdet:[]};
   for(let z=cz*CH;z<Math.min(N,cz*CH+CH);z++)for(let x=cx*CH;x<Math.min(N,cx*CH+CH);x++){const t=T(x,z),o=objs[key(t)];
     if(t.road)roadParts(t,out);
     if(!t.water&&!t.road&&hiGfx)for(const[dx,dz]of[[0,-1],[1,0],[0,1],[-1,0]]){const n=T(t.x+dx,t.z+dz);if(!n||!n.water||n.road)continue;const X=wx(t.x),Z=wx(t.z),h=(t.x*31+t.z*17)%7;
@@ -1501,7 +1557,7 @@ function rebuildChunk(ci){
 }
 function disposeGroup(g){g.traverse(m=>{if(m.geometry&&m.geometry!==boxGeo&&m.geometry!==cylGeo&&m.geometry!==roofGeo&&m.geometry!==tileGeo)m.geometry.dispose();});}
 function flushChunks(max){let n=0;if(chunks.some(c=>c.dirty))refreshTaps();for(let i=0;i<chunks.length&&n<max;i++)if(chunks[i].dirty){rebuildChunk(i);n++;}}
-function zoneTemp(t){const out={res:[],brk:[],glass:[],ind:[],det:[],lit:[],road:[],zone:[],bdet:[]};const g=new THREE.Group();placeParts(buildingParts(t.b),t,out);
+function zoneTemp(t){const out={res:[],brk:[],glass:[],ind:[],det:[],lit:[],kwin:[],road:[],zone:[],bdet:[]};const g=new THREE.Group();placeParts(buildingParts(t.b),t,out);
   partsMeshes(out,g);const sx=(LX(t.b)-1)/2,sz=(LZ(t.b)-1)/2;g.position.set(wx(t.x)+sx,0,wx(t.z)+sz);g.children.forEach(m=>m.position.set(-wx(t.x)-sx,0,-wx(t.z)-sz));return g;}
 function box(g,w,h,d,material,x=0,y=0,z=0){const m=new THREE.Mesh(boxGeo,material);m.scale.set(w,h,d);m.position.set(x,y,z);m.castShadow=m.receiveShadow=true;g.add(m);return m;}
 function cyl(g,r,h,material,x=0,y=0,z=0){const m=new THREE.Mesh(cylGeo,material);m.scale.set(r*2,h,r*2);m.position.set(x,y,z);m.castShadow=true;g.add(m);return m;}
@@ -3783,7 +3839,7 @@ function xFix(t){if(t.rt==='h'||(t.sw||'b')==='n'){t.xw=false;t.xo=null;t.bs=fal
 const xStraight=t=>{const m=roadMask(t);return m===5||m===10;};
 function xOK(t,k){if(k==='junction'&&ixOpt==='ichc')return !!t&&ixOf(t)!=='ichc'&&!!ichgInfo(t,true,true);
   if(k==='toll')return !!t&&t.road&&t.rt==='h'&&!t.water&&!t.cv&&!t._ramp&&!t.toll&&xStraight(t)&&!isJn(t);
-  if(k==='junction'&&ixOpt==='ichg')return !!t&&ixOf(t)!=='ichg'&&!!ichgInfo(t,true);
+  if(k==='junction'&&(ixOpt==='ichg'||ixOpt==='dumb'))return !!t&&ixOf(t)!==ixOpt&&!!ichgInfo(t,true);
   if(k==='junction'&&ixOpt==='rbig')return !!t&&ixOf(t)!=='rbig'&&!!rbInfo(t,true);
   if(k==='junction'&&ixOpt==='slip')return !!t&&ixOf(t)!=='slip'&&!!slipInfo(t,true);
   if(k==='junction')return !!t&&t.road&&!t.water&&isJn(t)&&ixOf(t)!==ixOpt&&!(t.rt==='h'&&ixOpt!=='ichg'&&ixOpt!=='sig'&&ixOpt!=='none'&&false)&&!(ixOpt==='round'&&(t.rt==='h'||t._ramp||roadNeighbors(t).some(n=>n.cv)));
@@ -3796,8 +3852,8 @@ function xOK(t,k){if(k==='junction'&&ixOpt==='ichc')return !!t&&ixOf(t)!=='ichc'
 function spend(c){if(G.mode==='sandbox')return true;if(G.money<c){toast('Not enough money');Snd.play('error');return false;}G.money-=c;return true;}
 function commit(list){
   list=list.filter(Boolean);const out=list.length;list=list.filter(owned);if(out&&!list.length){landHint();return;}if(!list.length)return;
-  if(NETCOST[tool]){const l=netFilter(list);if(!l.length){toast(tool==='buslane'?'Bus lanes go on roads':tool==='xwalk'?'Crosswalks go on straight streets or junctions with sidewalks':tool==='busstop'?'Bus stops go on straight streets with sidewalks':tool==='mstop'?'Metro stops go on a straight stretch of metro line':tool==='toll'?'Tap a straight piece of highway':tool==='junction'?(ixOpt==='ichc'?'Tap where a highway crosses or meets a street, avenue or boulevard (no extra land needed: the turning ramps fly over the junction)':ixOpt==='ichg'?'Tap where a highway crosses or meets a street, avenue or boulevard (the corner land must be clear)':ixOpt==='round'?'Roundabouts go on junctions of streets, avenues or boulevards (not highways or bridges)':'Tap a junction where three or four roads meet'):tool==='roadsign'?(sgOpt==='stop'||sgOpt==='yield'?'Stop and yield signs go on a straight street right next to a junction':'Signs go on straight road tiles'):tool==='roadmark'?'Markings go on straight road tiles':XTOOLS.has(tool)?'Footbridges and underpasses go on straight streets with sidewalks':'Blocked here');Snd.play('error');return;}if(!spend(l.length*NETCOST[tool]))return;
-    l.forEach(t=>{if(XTOOLS.has(tool)){if(tool==='mstop'){t.mst=true;netT=0;}else if(tool==='toll'){t.toll=true;}else if(tool==='junction'){t.ix=ixOpt==='sig'?null:ixOpt==='ichc'?'ichg':ixOpt;t.ixv=ixOpt==='ichc'?'c':ixOpt==='slip'?((()=>{const I=slipInfo(t,true);return I&&I.free?null:'c';})()):null;for(const k in _ichC)if(k.startsWith(key(t)+'|'))delete _ichC[k];tlDirty=true;refreshIchg();for(const n of roadNeighbors(t))markDirty(n);for(const[dx,dz]of[[1,1],[1,-1],[-1,1],[-1,-1]]){const c=T(t.x+dx,t.z+dz);if(c){markDirty(c);if(t.ix==='ichg'||t.ix==='rbig'||t.ix==='slip'){c.tree=false;setTree(c);c.zone=null;}}}}else if(tool==='roadsign')t.sg=sgOpt==='none'?null:sgOpt;else if(tool==='roadmark')t.mk=mkOpt==='none'?null:mkOpt;else if(tool==='busstop')t.bs=true;else if(tool==='xwalk')t.xw=true;else t.xo=tool==='xover'?'over':'under';}else if(tool==='buslane')t.buslane=true;else{if(tool==='taxiway')t.runway='taxi';else t[tool==='metroline'?'metro':tool]=true;t.tree=false;t.zone=null;}});l.forEach(redrawAround);if(XTOOLS.has(tool))for(const t of l)for(const[dx,dz]of[[2,0],[-2,0],[0,2],[0,-2]]){const n=T(t.x+dx,t.z+dz);if(n&&n.road)markDirty(n);}if(tool==='rail'||tool==='metroline')stationsNear(l);if(tool==='roadsign'||tool==='roadmark'||tool==='junction')lampsDirty=true;if(tool!=='buslane'&&tool!=='xwalk'&&tool!=='roadsign'&&tool!=='roadmark'&&tool!=='junction')l.forEach((t,i)=>roadWork(t,i*.22));dirty=true;netT=0;Snd.play('road');}
+  if(NETCOST[tool]){const l=netFilter(list);if(!l.length){toast(tool==='buslane'?'Bus lanes go on roads':tool==='xwalk'?'Crosswalks go on straight streets or junctions with sidewalks':tool==='busstop'?'Bus stops go on straight streets with sidewalks':tool==='mstop'?'Metro stops go on a straight stretch of metro line':tool==='toll'?'Tap a straight piece of highway':tool==='junction'?(ixOpt==='ichc'?'Tap where a highway crosses or meets a street, avenue or boulevard (no extra land needed: the turning ramps fly over the junction)':ixOpt==='ichg'?'Tap where a highway crosses or meets a street, avenue or boulevard (the corner land must be clear)':ixOpt==='round'?'Roundabouts go on junctions of streets, avenues or boulevards (not highways or bridges)':(ixOpt==='slip'||ixOpt==='rbig')?ixWhy(list[0]):'Tap a junction where three or four roads meet'):tool==='roadsign'?(sgOpt==='stop'||sgOpt==='yield'?'Stop and yield signs go on a straight street right next to a junction':'Signs go on straight road tiles'):tool==='roadmark'?'Markings go on straight road tiles':XTOOLS.has(tool)?'Footbridges and underpasses go on straight streets with sidewalks':'Blocked here');Snd.play('error');return;}if(!spend(l.length*NETCOST[tool]))return;
+    l.forEach(t=>{if(XTOOLS.has(tool)){if(tool==='mstop'){t.mst=true;netT=0;}else if(tool==='toll'){t.toll=true;}else if(tool==='junction'){t.ix=ixOpt==='sig'?null:ixOpt==='ichc'||ixOpt==='dumb'?'ichg':ixOpt;t.ixv=ixOpt==='dumb'?'d':ixOpt==='ichc'?'c':ixOpt==='slip'?((()=>{const I=slipInfo(t,true);return I&&I.free?null:'c';})()):null;for(const k in _ichC)if(k.startsWith(key(t)+'|'))delete _ichC[k];tlDirty=true;refreshIchg();for(const n of roadNeighbors(t))markDirty(n);for(const[dx,dz]of[[1,1],[1,-1],[-1,1],[-1,-1]]){const c=T(t.x+dx,t.z+dz);if(c){markDirty(c);if(t.ix==='ichg'||t.ix==='rbig'||t.ix==='slip'){c.tree=false;setTree(c);c.zone=null;}}}}else if(tool==='roadsign')t.sg=sgOpt==='none'?null:sgOpt;else if(tool==='roadmark')t.mk=mkOpt==='none'?null:mkOpt;else if(tool==='busstop')t.bs=true;else if(tool==='xwalk')t.xw=true;else t.xo=tool==='xover'?'over':'under';}else if(tool==='buslane')t.buslane=true;else{if(tool==='taxiway')t.runway='taxi';else t[tool==='metroline'?'metro':tool]=true;t.tree=false;t.zone=null;}});l.forEach(redrawAround);if(XTOOLS.has(tool))for(const t of l)for(const[dx,dz]of[[2,0],[-2,0],[0,2],[0,-2]]){const n=T(t.x+dx,t.z+dz);if(n&&n.road)markDirty(n);}if(tool==='rail'||tool==='metroline')stationsNear(l);if(tool==='roadsign'||tool==='roadmark'||tool==='junction')lampsDirty=true;if(tool!=='buslane'&&tool!=='xwalk'&&tool!=='roadsign'&&tool!=='roadmark'&&tool!=='junction')l.forEach((t,i)=>roadWork(t,i*.22));dirty=true;netT=0;Snd.play('road');}
   else if(isRoadTool(tool)){const r=roadPlan(list);if(!r.add.length&&!r.up.length){toast('Already built');return;}if(!spend(r.cost))return;const rt=ROADTOOL[tool];
     for(const t of r.add){t.road=true;t.tree=false;t.zone=null;}for(const t of r.add.concat(r.up)){t.rt=rt;t.sw=rt==='h'?'n':roadOpt.sw;t.bk=rt!=='h'&&roadOpt.bk;if(rt==='h')t.buslane=false;xFix(t);}
     r.add.concat(r.up).forEach(redrawAround);r.add.concat(r.up).forEach((t,i)=>roadWork(t,i*.22));dirty=true;Snd.play('road');if(r.up.length&&!r.add.length)toast(r.up.length+' road tile'+(r.up.length>1?'s':'')+' upgraded');}
@@ -4470,6 +4526,7 @@ function openSettings(){sheet.dataset.k='';
   <div class="sg" data-g="display">
   <label>Time of day</label><div class="chips"><button id="dv" class="${clockMode==='device'?'on':''}">Computer clock</button><button id="dn" class="${clockMode==='cycle'?'on':''}">Fast cycle</button><button id="dl" class="${clockMode==='day'?'on':''}">Always day</button></div><small style="color:var(--mute)">Computer clock follows your PC time: sunrise 6 AM, sunset 6 PM. Headlights switch on at dusk.</small>
   <label>Graphics</label><div class="chips">${['ultra','high','low'].map(k=>`<button data-gq="${k}" class="${gfxQ===k?'on':''}">${{ultra:'Ultra',high:'High',low:'Low'}[k]}</button>`).join('')}<button id="gDof" class="${POST.dof?'on':''}">Tilt-shift blur</button></div>
+  <label>Building models (Kenney City Kit)</label><div class="chips">${[['off','Off'],['mix','Mix'],['all','Kenney only']].map(([k,n])=>`<button data-ken="${k}" class="${kenMode===k?'on':''}">${n}</button>`).join('')}</div>
   <small style="color:var(--mute);display:block">Graphics card in use: <b style="color:${GPU_IGPU?'#ffb74d':'var(--ink)'}">${GPU_NAME||'unknown'}</b>${GPU_IGPU?'<br>This is the built-in Intel chip. If your laptop also has an NVIDIA card, open Windows Settings → System → Display → Graphics, add Metro Builder and choose <b>High performance</b>, then restart the game.':''}</small>
   <label>Weather</label><div class="chips">${[['real','Your local weather'],['auto','Changes by itself'],['clear','Clear'],['cloudy','Cloudy'],['rain','Rain']].map(([k,n])=>`<button data-wx="${k}" class="${weatherMode===k?'on':''}">${n}</button>`).join('')}</div>${weatherMode==='real'?`<small style="color:var(--mute)">${(r=>r?`${r.city?r.city+': ':''}${r.temp}°C, ${{clear:'clear',cloudy:'cloudy',rain:'rain'}[r.w]}${r.storm?' with thunderstorms':''}. `:'Looking up your local weather (needs internet). ')(RealWx.get())}Your approximate location is used only to fetch the weather from Open-Meteo.</small>`:''}
   </div><div class="sg" data-g="city"><label>Disasters</label><div class="chips">${[['off','Off'],['rare','Rare'],['normal','Sometimes'],['often','Often']].map(([k,n])=>`<button data-dis="${k}" class="${Disaster.mode===k?'on':''}">${n}</button>`).join('')}</div><div class="chips">${[['fire','🔥 Fire'],['quake','🌋 Earthquake'],['flood','🌊 Flood'],['tornado','🌪️ Tornado']].map(([k,n])=>`<button data-dnow="${k}">${n}</button>`).join('')}</div><small style="color:var(--mute)">Random disasters strike when your city has people living in it. Fire stations stop fires from spreading. The buttons start one right now.</small>
@@ -4488,7 +4545,7 @@ function openSettings(){sheet.dataset.k='';
   for(const[id,k]of[['vM','m'],['vMu','mu'],['vS','s']]){$(id).oninput=e=>{Snd.vol[k]=e.target.value/100;Snd.apply();};$(id).onchange=()=>Snd.save();}
   if($('tF'))$('tF').oninput=e=>{if(G){G.tollFee=+e.target.value;$('tfV').textContent='$'+G.tollFee;}};
   if($('tlG')){$('tlG').oninput=e=>{if(G){G.tlg=+e.target.value;$('tlgV').textContent=G.tlg+' s';}};$('tlA').oninput=e=>{if(G){G.tla=+e.target.value;$('tlaV').textContent=G.tla+' s';}};}
-  sheet.querySelectorAll('[data-gq]').forEach(b=>b.onclick=()=>{gfxQ=b.dataset.gq;try{localStorage.setItem('metrob_gfx',gfxQ);}catch(e){}applyGfx();openSettings();});if($('gDof'))$('gDof').onclick=()=>{POST.dof=!POST.dof;try{localStorage.setItem('metrob_dof',POST.dof?'1':'0');}catch(e){}openSettings();};
+  sheet.querySelectorAll('[data-ken]').forEach(b=>b.onclick=()=>{kenMode=b.dataset.ken;try{localStorage.setItem('metrob_kenney',kenMode);}catch(e){}for(const C of chunks)C.dirty=true;dirty=true;openSettings();});sheet.querySelectorAll('[data-gq]').forEach(b=>b.onclick=()=>{gfxQ=b.dataset.gq;try{localStorage.setItem('metrob_gfx',gfxQ);}catch(e){}applyGfx();openSettings();});if($('gDof'))$('gDof').onclick=()=>{POST.dof=!POST.dof;try{localStorage.setItem('metrob_dof',POST.dof?'1':'0');}catch(e){}openSettings();};
   sheet.querySelectorAll('[data-dis]').forEach(b=>b.onclick=()=>{Disaster.mode=b.dataset.dis;openSettings();});sheet.querySelectorAll('[data-dnow]').forEach(b=>b.onclick=()=>{sheet.classList.remove('open');Disaster.start(b.dataset.dnow);});
   sheet.querySelectorAll('[data-wx]').forEach(b=>b.onclick=()=>{weatherMode=b.dataset.wx;try{localStorage.setItem('metrob_weather2',weatherMode);}catch(e){}if(weatherMode==='real')RealWx.refresh();openSettings();});
   const setCF=m=>{confirmMode=m;try{localStorage.setItem('metrob_confirm',m);}catch(e){}openSettings();};$('cfT').onclick=()=>setCF('touch');$('cfA').onclick=()=>setCF('always');$('cfN').onclick=()=>setCF('never');
