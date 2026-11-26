@@ -279,6 +279,7 @@ const SERV = {
   fire:{name:'Fire station',cost:2500,up:80,size:1,r:9,cov:'fire',col:0xc8423c,cat:'svc'},
   school:{name:'Elementary school',cost:4000,up:120,size:2,r:10,cov:'edu',col:0xe8c35a,cat:'svc'},
   hospital:{name:'Hospital',cost:6000,up:180,size:2,r:12,cov:'health',col:0xf2f2f2,cat:'svc'},
+  funeral:{name:'Funeral home',cost:2400,up:70,size:1,r:10,cov:'death',col:0x5d4e6d,cat:'svc'},
   bus:{name:'Bus terminal',cost:5000,up:120,size:2,r:9,cov:'transit',col:0x2a9d8f,cat:'tr',gw:8,gh:6,plat:'Bus bay',capPer:350},
   metro:{name:'Metro station',cost:9000,up:200,size:1,r:8,cov:'transit',col:0x8d5bd6,cat:'tr',gw:7,gh:5,plat:'Metro platform',capPer:900},
   train:{name:'Train station',cost:15000,up:300,size:3,r:13,cov:'transit',col:0x9c6644,cat:'tr',gw:11,gh:7,plat:'Rail platform',capPer:1200},
@@ -305,7 +306,7 @@ const ITEM = Object.fromEntries(ITEMS.map(i=>[i.id,i]));
 const MILESTONES = [
   {pop:0,name:'Hamlet',unlock:['road','R','power','water','park','bulldoze','select','view']},
   {pop:120,name:'Village',unlock:['C','I','police','bus','buslane','lines','plaza','playground','avenue','clinic','library','cityhall','church'],reward:8000},
-  {pop:500,name:'Town',unlock:['fire','school','metro','metroline','mstop','park2','sports','wind','boulevard','highschool','policehq','museum','mall','ferris'],reward:15000},
+  {pop:500,name:'Town',unlock:['fire','funeral','school','metro','metroline','mstop','park2','sports','wind','boulevard','highschool','policehq','museum','mall','ferris'],reward:15000},
   {pop:1500,name:'City',unlock:['hospital','train','rail','solar','bigpark','highway','university','watertreat','stadium','obstower','port','shipyard','ferry'],reward:30000},
   {pop:4000,name:'Big City',unlock:['airport','runway','taxiway'],reward:60000},
   {pop:10000,name:'Metropolis',unlock:[],reward:150000},
@@ -1582,6 +1583,7 @@ function lineSide(t,k){const r={x:0,z:-1,endOn:false};if(!t||!t.b)return r;const
     const nb=netNb(n,want);r.endOn=nb.length>0&&nb.every(m=>(m.x-n.x)*dz===0&&(m.z-n.z)*dx===0);
     r.x=Math.round(dx*ca-dz*sa);r.z=Math.round(dx*sa+dz*ca);return r;}return r;}
 const ldims=b=>[b.lw||b.size||1,b.ld||b.size||1];
+const LVX={fire:1,police:1,hospital:1,funeral:1};// services whose levels add equipment and wings instead of storeys
 function servParts(b){
   const P={res:[],brk:[],glass:[],ind:[],det:[],lit:[],gl:[],water:[]},S=b.size||1,H=S/2,[LW,LD]=ldims(b),HW=LW/2,HD=LD/2;
   const D=(g,c)=>P.det.push([g,c]),L=(g,c)=>P.lit.push([g,c]),GL=(g,c)=>P.gl.push([g,c]),WT=g=>P.water.push([g,0xffffff]);
@@ -1608,6 +1610,15 @@ function servParts(b){
   // parking lot: painted stalls sized for one car each (one row, or two facing rows on deep lots); returns the stall centres
   const asphalt=(w,d,x,z)=>{D(RB(w,.006,d,x,0,z),0x4a4d52);D(RB(w,.004,.012,x,.004,z+d/2-.006),0xcfc9bd);const n=Math.max(1,Math.floor((w-.03)/.125)),p=(w-.03)/n,st=[],rows=d>=.6?[z-d*.24,z+d*.24]:[z-d*.12];
     for(const rz of rows){for(let i=0;i<=n;i++)D(RB(.006,.007,.22,x-w/2+.015+i*p,0,rz),0xe8e8e8);D(RB(w-.03,.007,.006,x,0,rz-.11),0xe8e8e8);for(let i=0;i<n;i++)st.push([x-w/2+.015+(i+.5)*p,rz]);}return st;};
+  // a parked vehicle from the car models (paint tinted), real length in metres; falls back to false when the model pack is missing
+  const pveh=(k,x,z,r,col,len,y=0)=>{const M=window.MODELPACK&&MODELPACK[k];if(!M||!M.g[0].k)return false;const bb=M.b,cx=(bb[0]+bb[3])/2,cz=(bb[2]+bb[5])/2,s=len/25/(bb[5]-bb[2]),C=new THREE.Color(col);
+    const gry=c=>{const r=c>>16,g=(c>>8)&255,b2=c&255;return Math.max(r,g,b2)-Math.min(r,g,b2)<24;},pm=Math.max(1,...M.g.filter(g=>g.k==='paint'&&gry(parseInt(g.c,16))).map(g=>{const c=parseInt(g.c,16);return Math.max(c>>16,(c>>8)&255,c&255);}));
+    for(const g of M.g){const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(g.p,3));geo.translate(-cx,-bb[1],-cz);geo.scale(s,s,s);geo.rotateY(r);geo.translate(x,y,z);geo.computeVertexNormals();
+      let c=parseInt(g.c,16);if(g.k==='paint'&&gry(c)){const f=(c>>16)/pm;c=new THREE.Color().copy(C).multiplyScalar(Math.min(1,f*1.02)).getHex();}else if(g.k==='paint'&&col!==0xffffff){}
+      (g.k==='head'||g.k==='tail'?L:D)(geo,c);}return true;};
+  // rooftop helipad: dark pad, white ring and H, yellow edge lights
+  const helipad=(x,y,z,r)=>{D(new THREE.CylinderGeometry(r,r,.008,28).translate(x,y+.004,z),0x2d2f33);ring(r*.82,r*.82,.006,0xf2f2f2,28,x,z,y+.009);for(const[w,d,dx]of[[.022,r*.8,-r*.3],[.022,r*.8,r*.3],[r*.55,.022,0]])D(RB(w,.003,d,x+dx,y+.008,z),0xf2f2f2);
+    for(let i=0;i<8;i++){const a=i/8*Math.PI*2;L(new THREE.SphereGeometry(.007,6,4).translate(x+Math.cos(a)*r*.96,y+.012,z+Math.sin(a)*r*.96),0xffd23f);}};
   const genT=false;
   if(genT){const Lb=b.layout,kind=b.kind,lvT=Math.min(3,b.lv||1),back={bus:.44,metro:.06,train:.5,airport:Math.min(1.1,S*.27)}[kind],x0=-H+.04,x1=H-.04,z0=-H+back,z1=H-.06,cw=(x1-x0)/Lb.W,ch=(z1-z0)/Lb.H;
     const hh={bus:FLOOR*1.7,metro:FLOOR*1.3,train:FLOOR*2.3,airport:FLOOR*2.8}[kind]*(lvT>=3?1.35:1),wc=new THREE.Color(WCOLS[(Lb.wc&&Lb.wc[0])||0]).getHex(),body={bus:0xe7e2d6,metro:0xdfe3e6,train:0xe8dcc8,airport:0xeef1f3}[kind];
@@ -1667,16 +1678,29 @@ function servParts(b){
       for(let i=0;i<20;i++){const a=i/20*Math.PI*2+.15,r=1.08+(i%3)*.07;if(Math.abs(Math.cos(a))>.96||Math.abs(Math.sin(a))>.96)continue;tree(Math.cos(a)*r,Math.sin(a)*r*.95,.9+(i%4)*.12,i%5===0);}
       for(let i=0;i<10;i++){const a=i/10*Math.PI*2+.15;bench(Math.cos(a)*1.04,Math.sin(a)*.94,-a-Math.PI/2);}for(let i=0;i<6;i++){const a=i/6*Math.PI*2;lamp(Math.cos(a)*.86,Math.sin(a)*.76);}
       flowers(-.45,.95,.3,.12);flowers(.45,-.95,.3,.12);break;
-    case 'police':{D(RB(.98,.004,.98,0,0,0),0xc9c3b6);const ps=asphalt(.55,.28,.18,.3);W('res',.62,FLOOR*2,.42,-.08,0,-.18,0x8fa6c4);D(RB(.64,.012,.44,-.08,FLOOR*2,-.18),0x5a5f66);D(RB(.64,.02,.44,-.08,FLOOR*.95,-.18),0x1f3a5f);
-      D(RB(.22,.012,.1,-.08,.11,.07),0x1f3a5f);for(const s of[-1,1])D(CY(.006,.006,.11,-.08+s*.09,0,.11,6),0xdddddd);D(RB(.08,.1,.006,-.08,0,.034),0x22313d);sign(.2,-.08,.15,.04,0x4fb3ff);
-      D(CY(.008,.012,.35,.15,FLOOR*2,-.28,6),0x9aa0a6);L(new THREE.SphereGeometry(.01,6,4).translate(.15,FLOOR*2+.36,-.28),0xff2a2a);flag(-.42,.4,0x1565c0);
-      car(ps[1][0],ps[1][1],0,0xf4f4f4,0x1f3a5f,[0x2a6bff,0xff2a2a]);car(ps[2][0],ps[2][1],0,0xf4f4f4,0x1f3a5f,[0xff2a2a,0x2a6bff]);fence();break;}
-    case 'fire':{D(RB(.98,.004,.98,0,0,0),0xc9c3b6);D(RB(.6,.006,.3,.0,0,.32),0x5a5d62);W('res',.74,FLOOR*2,.5,0,0,-.12,0xa0412d);D(RB(.76,.014,.52,0,FLOOR*2,-.12),0x5a5f66);
-      for(let i=-1;i<=1;i++){D(RB(.18,.17,.008,i*.23,0,.134),0xb71c1c);for(let k=0;k<4;k++)D(RB(.18,.004,.009,i*.23,.03+k*.04,.135),0x8b0000);D(RB(.2,.012,.01,i*.23,.17,.135),0xf2f2f2);}
-      W('res',.12,.55,.12,.32,0,-.3,0x8a3a2a);D(RB(.14,.03,.14,.32,.55,-.3),0x5a5f66);sign(.3,0,.21,.135,0xff5252);
-      const ft=[[new THREE.BoxGeometry(.16,.08,.38).translate(0,.06,0),0xc62828],[new THREE.BoxGeometry(.15,.05,.11).translate(0,.12,.12),0xc62828],[new THREE.BoxGeometry(.152,.03,.1).translate(0,.125,.13),0x1d2a35],[new THREE.BoxGeometry(.162,.012,.38).translate(0,.05,0),0xf2f2f2],[new THREE.BoxGeometry(.04,.02,.3).translate(0,.11,-.05),0xc0c4c8]];
-      for(const[g,c]of ft)D(g.scale(.82,.82,.82).translate(-.23,0,.29),c);for(const sx of[-1,1])for(const sz of[-.12,.12])D(new THREE.CylinderGeometry(.025,.025,.018,10).rotateZ(Math.PI/2).translate(-.23+sx*.066,.025,.29+sz*.82),0x151515);
-      L(RB(.1,.01,.018,-.23,.125,.38),0xff2a2a);flag(.42,.42,0xc62828);break;}
+    case 'police':{const lv=Math.min(3,b.lv||1);D(RB(.98,.004,.98,0,0,0),0xc9c3b6);const ps=asphalt(.55,.28,.18,.3);W('res',.62,FLOOR*2,.42,-.08,0,-.18,0x8fa6c4);D(RB(.64,.012,.44,-.08,FLOOR*2,-.18),0x5a5f66);D(RB(.64,.02,.44,-.08,FLOOR*.95,-.18),0x1f3a5f);
+      D(RB(.22,.012,.1,-.08,.11,.07),0x1f3a5f);for(const s of[-1,1])D(CY(.006,.006,.11,-.08+s*.09,0,.11,6),0xdddddd);D(RB(.08,.1,.006,-.08,0,.034),0x22313d);flag(-.42,.4,0x1565c0);
+      // patrol cars in the lot: one more per level; level 2 adds the detention & K9 wing, level 3 the roof helipad, SWAT truck and a taller radio mast
+      for(let i=0;i<Math.min(ps.length,lv+1);i++)pveh('c_police',ps[i][0],ps[i][1],0,0xf4f4f4,4.9)||car(ps[i][0],ps[i][1],0,0xf4f4f4,0x1f3a5f,[0x2a6bff,0xff2a2a]);
+      if(lv>=2){W('res',.2,FLOOR*1.5,.38,.36,0,-.2,0x7d92b0);D(RB(.22,.012,.4,.36,FLOOR*1.5,-.2),0x5a5f66);for(let k=0;k<3;k++)D(RB(.004,.04,.05,.459,.06,-.33+k*.1),0x2b2f36);D(RB(.1,.1,.006,.36,0,.0),0x37474f);L(RB(.06,.012,.004,.36,.115,.004),0xffd23f);
+        pveh('c_van',.36,.2,0,0x1f3a5f,4.9);D(RB(.04,.025,.003,.36,.07,.31),0xf2f2f2);}
+      if(lv>=3){helipad(-.12,FLOOR*2+.012,-.18,.18);D(CY(.008,.014,.55,.4,FLOOR*1.5,-.32,6),0x9aa0a6);L(new THREE.SphereGeometry(.011,6,4).translate(.4,FLOOR*1.5+.56,-.32),0xff2a2a);D(new THREE.SphereGeometry(.035,10,6,0,6.3,0,1.2).rotateX(-.6).translate(.33,FLOOR*1.5+.04,-.12),0xeceff1);
+        pveh('r_van',-.3,.27,Math.PI/2,0x263238,6)||pveh('c_van',-.3,.27,Math.PI/2,0x263238,5.2);}
+      else{D(CY(.008,.012,.35,.15,FLOOR*2,-.28,6),0x9aa0a6);L(new THREE.SphereGeometry(.01,6,4).translate(.15,FLOOR*2+.36,-.28),0xff2a2a);}
+      fence();break;}
+    case 'fire':{const lv=Math.min(3,b.lv||1);D(RB(.98,.004,.98,0,0,0),0xc9c3b6);D(RB(.8,.006,.32,.0,0,.32),0x5a5d62);W('res',.74,FLOOR*2,.5,0,0,-.12,0xa0412d);D(RB(.76,.014,.52,0,FLOOR*2,-.12),0x5a5f66);
+      // three engine bays: an open bay shows its rig nosing out (one per level), closed bays keep the red roll-up door
+      for(let i=-1;i<=1;i++){const open=[0,-1,1].indexOf(i)<lv,x=i*.23;D(RB(.2,.012,.01,x,.17,.135),0xf2f2f2);
+        if(open){D(RB(.18,.165,.004,x,0,.131),0x1b1d20);D(RB(.18,.02,.01,x,.15,.135),0x8b0000);pveh(['r_firetruck','r_firetruck','r_ambulance'][[0,-1,1].indexOf(i)],x,.134+.14-(i===1&&lv>=3?3:4.6)/25,0,0xffffff,i===1?6:9.5);}
+        else{D(RB(.18,.17,.008,x,0,.134),0xb71c1c);for(let k=0;k<4;k++)D(RB(.18,.004,.009,x,.03+k*.04,.135),0x8b0000);}}
+      W('res',.12,.55,.12,.32,0,-.3,0x8a3a2a);D(RB(.14,.03,.14,.32,.55,-.3),0x5a5f66);flag(.44,.44,0xc62828);
+      for(let i=0;i<3;i++)D(RB(.16,.003,.012,-.3+i*.3,.004,.47),0xf2c200);
+      if(lv>=2){// watch office and hose-drying rack at the side, a hydrant for drills
+        W('res',.1,FLOOR,.14,-.43,0,-.25,0xb0533e);D(RB(.11,.01,.15,-.43,FLOOR,-.25),0x5a5f66);GL(RB(.004,.05,.08,-.379,.05,-.25),0x6f9bb8);
+        for(const z of[.24,.34])D(RB(.004,.12,.004,-.45,0,z),0x8a9097);D(RB(.004,.004,.12,-.45,.12,.29),0x8a9097);for(let k=0;k<3;k++)D(RB(.003,.1,.006,-.45,.02,.25+k*.04),0xd84315);
+        D(CY(.012,.014,.05,.44,0,.2,8),0xd32f2f);D(new THREE.SphereGeometry(.013,8,5).translate(.44,.05,.2),0xd32f2f);}
+      if(lv>=3){helipad(-.08,FLOOR*2+.014,-.12,.19);D(CY(.004,.004,.14,.34,.585,-.3,4),0x9aa0a6);D(new THREE.ConeGeometry(.018,.07,8).rotateZ(Math.PI/2).translate(.375,.7,-.3),0xff6d00);}
+      break;}
     case 'school':{D(RB(1.96,.004,1.96,0,0,0),0xc9c3b6);W('res',1.3,FLOOR*3,.36,-.25,0,-.6,0xe8d7a8);W('res',.36,FLOOR*3,.9,-.72,0,.0,0xe8d7a8);D(RB(1.32,.014,.38,-.25,FLOOR*3,-.6),0x7a3b2e);D(RB(.38,.014,.92,-.72,FLOOR*3,0),0x7a3b2e);
       D(RB(1.32,.04,.37,-.25,0,-.6),0xa0412d);D(RB(.3,.012,.14,.0,.13,-.38),0x1565c0);for(const s of[-1,1])D(CY(.007,.007,.13,s*.13,0,-.32,6),0xf2f2f2);D(RB(.14,.12,.006,0,0,-.42),0x22313d);
       D(new THREE.CylinderGeometry(.045,.045,.012,16).rotateX(Math.PI/2).translate(0,FLOOR*3-.07,-.41),0xffffff);D(new THREE.BoxGeometry(.004,.03,.002).translate(0,FLOOR*3-.06,-.403),0x222222);
@@ -1685,13 +1709,44 @@ function servParts(b){
       D(RB(.4,.006,.3,.55,0,-.15),0x4a6f9a);for(const s of[-1,1]){D(CY(.006,.006,.14,.55+s*.18,0,-.15,6),0xdddddd);D(RB(.004,.03,.04,.55+s*.18,.13,-.15),0xffffff);}
       const bus=[[new THREE.BoxGeometry(.15,.11,.42).translate(0,.075,0),0xf2b705],[new THREE.BoxGeometry(.152,.035,.36).translate(0,.1,-.02),0x1d2a35],[new THREE.BoxGeometry(.152,.008,.42).translate(0,.06,0),0x111111]];D(RB(.46,.005,.17,-.3,0,.74),0x4a4d52);for(const z of[.655,.825])D(RB(.46,.006,.008,-.3,0,z),0xf2c94c);for(const[g,c]of bus)D(g.scale(.8,.8,.8).rotateY(Math.PI/2).translate(-.3,0,.74),c);
       flag(-.05,-.3,0xe53935);for(const[x,z]of[[-.9,.85],[.9,-.85],[-.2,.85],[.95,.9]])tree(x,z,1);fence(0x6d6f73,.06);break;}
-    case 'hospital':{D(RB(1.96,.004,1.96,0,0,0),0xc9c3b6);const ps=asphalt(.8,.36,.45,.7);W('res',.7,FLOOR*6,.5,-.3,0,-.4,0xf4f4f2);W('res',.5,FLOOR*3,.8,.5,0,-.35,0xeceae4);
-      GL(RB(.4,FLOOR*1.4,.3,-.3,0,.0),0x6f9bb8);D(RB(.44,.012,.34,-.3,FLOOR*1.4,0),0xdedede);D(RB(.72,.016,.52,-.3,FLOOR*6,-.4),0x8a8f94);
-      D(new THREE.CylinderGeometry(.18,.18,.012,24).translate(-.3,FLOOR*6+.016,-.4),0x2d2f33);for(const[w,d,x]of[[.03,.16,-.36],[.03,.16,-.24],[.1,.03,-.3]])D(RB(w,.003,d,x,FLOOR*6+.022,-.4),0xf2f2f2);
+    case 'hospital':{const lv=Math.min(3,b.lv||1);D(RB(1.96,.004,1.96,0,0,0),0xc9c3b6);
+      W('res',.7,FLOOR*6,.5,-.3,0,-.4,0xf4f4f2);W('res',.5,FLOOR*3,.8,.5,0,-.35,0xeceae4);
+      GL(RB(.4,FLOOR*1.4,.3,-.3,0,.0),0x6f9bb8);D(RB(.44,.012,.34,-.3,FLOOR*1.4,0),0xdedede);D(RB(.72,.016,.52,-.3,FLOOR*6,-.4),0x8a8f94);D(RB(.52,.014,.82,.5,FLOOR*3,-.35),0x8a8f94);
       for(const[x,y,z]of[[-.3,FLOOR*4.5,-.145],[.5,FLOOR*2.2,.055]]){L(RB(.12,.035,.006,x,y,z),0xff1744);L(RB(.035,.12,.006,x,y-.043,z),0xff1744);}
-      D(RB(.36,.012,.2,.5,.12,.17),0xdedede);for(const s of[-1,1])D(CY(.007,.007,.12,.5+s*.16,0,.25,6),0xdddddd);
-      car(.38,.18,0,0xffffff,0xd32f2f,[0xff2a2a,0x2a6bff]);car(.62,.18,0,0xffffff,0xd32f2f,null);for(let i=0;i<3;i++)car(ps[i*2][0],ps[i*2][1],0,[0x5a6b7d,0xb3261e,0xd9d9d9][i],null,null);
-      for(const[x,z]of[[-.85,.85],[-.85,.2],[.9,-.9]])tree(x,z,1);flag(-.75,-.05,0xffffff);break;}
+      // emergency entrance: the canopy gets one more ambulance bay per level
+      const nb=lv+1;D(RB(.18*nb,.012,.2,.5,.12,.17),0xdedede);for(const s of[-1,1])D(CY(.007,.007,.12,.5+s*(.09*nb-.02),0,.25,6),0xdddddd);L(RB(.16,.03,.004,.5,.1,.066),0xff1744);
+      for(let i=0;i<nb;i++)pveh('r_ambulance',.5-.09*(nb-1)+i*.18,.2,0,0xffffff,6)||car(.5-.09*(nb-1)+i*.18,.18,0,0xffffff,0xd32f2f,[0xff2a2a,0x2a6bff]);
+      // roof: plant room until level 3 turns the tower roof into a lit helipad
+      if(lv>=3)helipad(-.3,FLOOR*6+.016,-.4,.2);else{for(const x of[-.48,-.12])D(RB(.14,.06,.12,x,FLOOR*6+.016,-.5),0xc9ccd0);D(CY(.04,.04,.05,-.3,FLOOR*6+.016,-.3,10),0xb0b4b8);}
+      for(let i=0;i<3;i++)D(RB(.1,.05,.08,.38+i*.12,FLOOR*3+.014,-.6),0xc9ccd0);
+      if(lv>=2){// specialist wing joined to the lobby by a glass walkway
+        W('res',.48,FLOOR*3,.56,-.66,0,.6,0xe9eef2);D(RB(.5,.014,.58,-.66,FLOOR*3,.6),0x8a8f94);GL(RB(.12,FLOOR*.9,.2,-.48,0,.22),0x6f9bb8);D(RB(.14,.01,.22,-.48,FLOOR*.9,.22),0xdedede);
+        L(RB(.3,.03,.004,-.66,FLOOR*2.4,.322),0x4fc3f7);for(const z of[.42,.78])D(RB(.1,.05,.08,-.66,FLOOR*3+.014,z),0xc9ccd0);}
+      else for(const[x,z]of[[-.85,.85],[-.85,.2]])tree(x,z,1);
+      if(lv>=3){// two-level car park replaces the surface lot; liquid-oxygen tanks behind the wing
+        const px=.45,pz=.7;D(RB(.82,.006,.38,px,0,pz),0x4a4d52);D(RB(.82,.02,.38,px,.13,pz),0xb8b4ac);for(const x of[-.38,0,.38])for(const z of[-.16,.16])D(RB(.03,.13,.03,px+x,0,pz+z),0xa8a49c);
+        D(RB(.82,.04,.006,px,.15,pz+.19),0xd6d2ca);D(RB(.82,.04,.006,px,.15,pz-.19),0xd6d2ca);for(let i=0;i<5;i++)pveh(['c_sedan','c_hatch','c_suv','c_sedan','c_van'][i],px-.3+i*.15,pz,0,[0x5a6b7d,0xb3261e,0xd9d9d9,0x1f4f8f,0x232326][i],4.5,.15);
+        for(let i=0;i<3;i++)pveh(['c_sedan','c_suv','c_hatch'][i],px-.25+i*.18,pz,0,[0x9aa3ab,0x2f6f5c,0xf2f2f2][i],4.5);
+        for(const z of[-.88,-.72]){D(CY(.05,.05,.32,.88,0,z,12),0xf2f2f2);D(new THREE.SphereGeometry(.05,12,6,0,6.3,0,1.6).translate(.88,.32,z),0xf2f2f2);}D(RB(.004,.12,.3,.82,0,-.8),0x8a9097);}
+      else{const ps=asphalt(.8,.36,.45,.7);for(let i=0;i<3;i++)car(ps[i*2][0],ps[i*2][1],0,[0x5a6b7d,0xb3261e,0xd9d9d9][i],null,null);tree(.9,-.9,1);}
+      flag(-.75,-.05,0xffffff);break;}
+    case 'funeral':{const lv=Math.min(3,b.lv||1);lawn(0x5f8f45);
+      // a quiet chapel with a columned porch, a porte-cochère where the hearse waits, hedges and trees; level 2 adds the crematorium, level 3 the columbarium garden and bell tower
+      D(RB(.16,.007,.52,.27,0,.22),0x4a4d52);D(RB(.3,.007,.12,-.12,0,.32),0xd8d2c4);D(RB(.08,.007,.2,-.12,0,.42),0xd8d2c4);
+      W('res',.46,FLOOR*1.6,.4,-.12,0,-.12,0xe9dfcc);D(gable(.5,.44,.14,-.12,FLOOR*1.6,-.12),0x4b4f58);D(RB(.5,.012,.44,-.12,FLOOR*1.6,-.12),0x4b4f58);
+      D(RB(.3,.012,.11,-.12,FLOOR*1.25,.135),0xf2efe8);D(gable(.32,.11,.06,-.12,FLOOR*1.25+.012,.135),0xf2efe8);for(const x of[-.25,-.165,-.075,.01])D(CY(.009,.01,FLOOR*1.25,x,0,.18,8),0xf7f5f0);
+      D(RB(.09,.12,.006,-.12,0,.083),0x3e2723);for(const x of[-.3,.06])GL(RB(.05,.09,.004,x,.06,.082),0x6f8aa0);
+      D(RB(.2,.012,.26,.27,.14,.0),0x4b4f58);for(const[x,z]of[[.19,-.11],[.35,-.11],[.19,.11],[.35,.11]])D(CY(.007,.008,.14,x,0,z,6),0xf2efe8);
+      pveh('c_van',.27,.02,0,0x15151a,5.6);
+      for(let i=0;i<5;i++)D(RB(.07,.045,.045,-.42+i*.075,0,.455),0x2f5d2a);for(let i=0;i<3;i++)D(RB(.045,.045,.07,.44,0,-.4+i*.08),0x2f5d2a);
+      tree(-.4,-.4,.9,true);tree(.4,.42,.7);D(RB(.16,.05,.02,-.38,0,.36),0x8d8a84);L(RB(.13,.02,.004,-.38,.025,.371),0xf2efe8);lamp(.12,.42,.26);
+      if(lv>=2){W('brk',.2,FLOOR*1.1,.22,.27,0,-.33,0x9a6a55);D(RB(.22,.012,.24,.27,FLOOR*1.1,-.33),0x4b4f58);D(CY(.025,.03,.42,.34,0,-.4,10),0x7a3b2e);D(CY(.032,.032,.02,.34,.42,-.4,10),0x5a5f66);
+        pveh('c_van',.27,.34,0,0x15151a,5.6);D(RB(.08,.05,.06,-.4,0,.2),0xf4ede0);D(RB(.1,.006,.08,-.4,.05,.2),0x6d4c41);const fc=[0xe53935,0xfdd835,0xffffff,0x8e24aa];for(let k=0;k<6;k++)D(new THREE.IcosahedronGeometry(.01,0).translate(-.43+(k%3)*.03,.058,.18+Math.floor(k/3)*.03),fc[k%4]);}
+      if(lv>=3){for(const z of[-.46,-.3]){D(RB(.26,.1,.03,-.3,0,z),0xb0aca4);for(let r=0;r<3;r++)for(let c=0;c<6;c++)D(RB(.03,.022,.004,-.41+c*.044,.015+r*.028,z+.016),0x8d8a84);}
+        WT(RB(.12,.004,.06,-.3,.004,-.38));D(RB(.14,.01,.08,-.3,0,-.38),0xd6d1c7);
+        W('res',.1,FLOOR*2.6,.1,-.12,0,-.37,0xe9dfcc);D(new THREE.ConeGeometry(.08,.16,4).rotateY(Math.PI/4).translate(-.12,FLOOR*2.6+.08,-.37),0x4b4f58);D(new THREE.SphereGeometry(.02,8,6).translate(-.12,FLOOR*2.3,-.315),0xc9a227);
+        pveh('c_van',.42,.34,0,0x15151a,5.6);}
+      break;}
     case 'power':{D(RB(1.96,.004,1.96,0,0,0),0x9e9a92);W('ind',.7,.42,.5,-.5,0,-.55,0xc9c3b8);D(RB(.72,.02,.52,-.5,.42,-.55),0x7c8790);for(let i=0;i<4;i++)D(new THREE.BoxGeometry(.18,.06,.5).rotateZ(.5).translate(-.75+i*.17,.46,-.55),0x8c949a);
       const tower=new THREE.LatheGeometry([[.34,0],[.31,.2],[.24,.55],[.22,.7],[.25,.9],[.27,.95]].map(([r,y])=>new THREE.Vector2(r,y)),24);for(const z of[-.15,.55])D(tower.clone().translate(.45,0,z),0xd8d4cc);
       for(const z of[-.15,.55])D(new THREE.CylinderGeometry(.26,.26,.01,24).translate(.45,.94,z),0x6d6f73);
@@ -1971,7 +2026,7 @@ function servParts(b){
   if(lv>1&&SERV[b.kind]&&SERV[b.kind].special){for(let i=0;i<Math.round(S*8);i++){const a=i/(S*8);L(new THREE.SphereGeometry(.009,6,4).translate(-H+.04+a*(S-.08),.18,H-.03),[0xff8a80,0xffe082,0x80d8ff,0xb9f6ca][i%4]);}
     for(const sx of[-1,1])D(CY(.006,.006,.22,sx*(H-.05),0,H-.03,5),0x8a8f94);
     if(lv>2){const x=H-.25,z=H-.12;for(const sx of[-1,1])D(CY(.01,.01,.3,x+sx*.12,0,z,6),0x37474f);D(RB(.3,.18,.02,x,.3,z),0x263238);L(RB(.26,.14,.004,x,.32,z+.012),0x4fc3f7);L(RB(.12,.03,.005,x-.05,.38,z+.015),0xffd23f);L(RB(.08,.03,.005,x+.07,.34,z+.015),0xff5252);}}
-  if(lv>1&&!genT&&!UOPT[b.kind]&&!(SERV[b.kind]&&SERV[b.kind].special&&['stadium','obstower','ferris'].includes(b.kind))){
+  if(lv>1&&!genT&&!LVX[b.kind]&&!UOPT[b.kind]&&!(SERV[b.kind]&&SERV[b.kind].special&&['stadium','obstower','ferris'].includes(b.kind))){
     if(PARKS[b.kind]){const e=H-.07;for(const sx of[-1,1])for(const sz of[-1,1])lamp(sx*e,sz*e,.3);for(const sx of[-1,1])flowers(sx*(H-.06),0,.06,Math.min(.5,S*.4));
       if(lv>2){D(RB(.12,.09,.1,-H+.14,0,H-.16),0xc9a26b);D(gable(.16,.14,.06,-H+.14,.09,H-.16),0xb5523b);for(const x of[-.06,.06])D(CY(.03,.03,.004,-H+.3+x*2,.06,H-.16,10),[0xe53935,0x1e88e5][x>0?1:0]);for(let i=0;i<8;i++)L(new THREE.SphereGeometry(.007,6,4).translate(-H+.06+i*(2*H-.12)/7,.26,H-.06),0xffe2a6);}}
     else if(SERV[b.kind]&&SERV[b.kind].cat==='tr'){// transport terminals: a dispatcher booth, then more floor space (an upper storey or an annex) and a vehicle garage
@@ -2082,7 +2137,7 @@ function servGroup(b){const g=new THREE.Group(),P=servParts(b);for(const k in P)
     const lt=[];for(let i=0;i<24;i++){const a=i/24*Math.PI*2;lt.push([new THREE.SphereGeometry(.012,6,4).translate(Math.cos(a)*R,Math.sin(a)*R,.06),[0xff8a80,0xffe082,0x80d8ff,0xb9f6ca][i%4]]);}const lm=new THREE.Mesh(mergeG(lt,true),bLitMat);w.add(lm);}
   addSign(g,b,P);return g;}
 
-const SERVM=new Set(['cityhall','church','museum','mall','stadium','obstower','ferris','park','plaza','playground','park2','sports','bigpark','police','fire','school','hospital','clinic','library','highschool','university','policehq','watertreat','power','solar','wind','water','bus','metro','train','airport','port','shipyard','ferry']);
+const SERVM=new Set(['funeral','cityhall','church','museum','mall','stadium','obstower','ferris','park','plaza','playground','park2','sports','bigpark','police','fire','school','hospital','clinic','library','highschool','university','policehq','watertreat','power','solar','wind','water','bus','metro','train','airport','port','shipyard','ferry']);
 function buildMesh(t){
   const b=t.b, g=new THREE.Group();
   g.position.set(wx(t.x)+(LX(b)-1)/2,0,wx(t.z)+(LZ(b)-1)/2);
@@ -2227,7 +2282,7 @@ const hasRoad=t=>{for(const[dx,dz]of[[0,-1],[1,0],[0,1],[-1,0]]){const n=T(t.x+d
 function cap(b){if(!b.zone)return 0;const area=b.des&&b.d?desDims(b).wm*b.d.dm/(TM*TM)*(1+.15*(b.d.pod||0)):b.fp*b.fp;return Math.round(b.floors*area*(b.zone==='R'?9:b.zone==='C'?7:12));}
 function happiness(t){
   const v=cov[key(t)];let h=45;
-  for(const k of['police','fire','health','edu','transit'])if(v[k])h+=8+Math.min(4,(v[k]-1)*2);if(v.park)h+=6+Math.min(3,v.park)*2;if(v.cleanw)h+=3*v.cleanw;if(v.landmark)h+=4+Math.min(6,v.landmark);
+  for(const k of['police','fire','health','edu','transit'])if(v[k])h+=8+Math.min(4,(v[k]-1)*2);if(v.death)h+=5;if(v.park)h+=6+Math.min(3,v.park)*2;if(v.cleanw)h+=3*v.cleanw;if(v.landmark)h+=4+Math.min(6,v.landmark);
   if(!v.power)h-=25;if(!v.water)h-=25;if(v.poll&&t.b.zone==='R')h-=18;
   h+=(v.comfort||0)/10;h-=(G.tax-10)*2;
   return clamp(Math.round(h),0,100);
@@ -2250,7 +2305,7 @@ function tick(){if(G&&G.mode==='career'&&!G.landTip&&stats.pop>=300&&ownedCount(
   let tour=0,trade=0;for(const t of rs){const s=t.b.kind&&SERV[t.b.kind];if(s&&s.tour)tour+=s.tour*Math.min(3,t.b.lv||1)*(pop>200?1:.3);if(s&&s.trade)trade+=s.trade*(ij>0?Math.min(2,.5+ij/400):.3);}tour+=trade;stats.trade=trade;
   const inc=(pop*2.2+jobs*1.4)*G.tax/10+riders*0.32+shopInc+tour;
   {const tf=G.tax/10,upBy={};for(const t of rs)if(t.b.kind){const s=SERV[t.b.kind],c=s.cat==='tr'?'Transit':s.special?'Landmarks':(COVN[s.cov]||'Other');upBy[c]=(upBy[c]||0)+svcUpkeep(t.b);}
-    let rc=0,cv={power:0,water:0,police:0,fire:0,health:0,edu:0,park:0,transit:0,poll:0},nR=0,nC=0,nI=0;
+    let rc=0,cv={power:0,water:0,police:0,fire:0,health:0,death:0,edu:0,park:0,transit:0,poll:0},nR=0,nC=0,nI=0;
     for(const t of rs){const b=t.b;if(!b.zone)continue;if(b.zone==='R'){nR++;const c=cap(b),v=cov[key(t)];rc+=c;for(const k in cv)if(v[k])cv[k]+=c;}else if(b.zone==='C')nC++;else nI++;}
     stats.br={incTour:tour,incR:pop*2.2*tf,incC:cj*1.4*tf,incI:ij*1.4*tf,incT:riders*.32,incS:shopInc,upBy,cv:Object.fromEntries(Object.entries(cv).map(([k,v])=>[k,rc?Math.round(v/rc*100):0])),nR,nC,nI};}
   stats.pop=pop;stats.cj=cj;stats.ij=ij;stats.hap=hn?Math.round(hs/hn-(G.tiles.some(t=>t.toll)?Math.max(0,((G.tollFee??TOLL_FEE)-3)*.6):0)):0;stats.inc=inc;stats.exp=up;stats.riders=riders;
@@ -2518,9 +2573,10 @@ const VTYPES=[
   {id:'suv',n:KV?14:18,sp:1.15,P:mcarP('c_suv',()=>passenger(SUV)),o:mcarO('c_suv',SUV),cols:[0x161616,0xf2f2f2,0x4d5966,0x8d3a12,0x1e5a99,0x4f6b2a,0x8a8f94,0xa31621,0xc58b2a]},
   {id:'taxi',n:6,sp:1.25,P:mcarP('c_sedan',()=>passenger(TAXI)),o:mcarO('c_sedan',SEDAN),cols:[0xf2c200,0xf2f2f2]},
   ...(HASCARS?[{id:'jeep',n:5,sp:1.1,P:mcarP('c_jeep',()=>passenger(SUV)),o:mcarO('c_jeep',SUV),cols:[0x2e7d32,0x8d6e63,0x1c1c1e,0xf2f2f2,0xc62828]},
-    {id:'police',n:3,sp:1.3,P:mcarP('c_police',()=>passenger(SEDAN)),o:mcarO('c_police',SEDAN),cols:[0xffffff]},
-    {id:'ambulance',n:2,sp:1.2,P:mcarP('r_ambulance',()=>passenger(MPV)),o:mcarO('r_ambulance',MPV),cols:[0xffffff]},
-    {id:'firetruck',n:1,sp:1.0,P:mcarP('r_firetruck',()=>truck()),o:mcarO('r_firetruck',{L:.6,lightY:.085}),cols:[0xffffff]}]:[]),
+    {id:'police',n:16,sp:1.3,P:mcarP('c_police',()=>passenger(SEDAN)),o:mcarO('c_police',SEDAN),cols:[0xffffff]},
+    {id:'ambulance',n:12,sp:1.2,P:mcarP('r_ambulance',()=>passenger(MPV)),o:mcarO('r_ambulance',MPV),cols:[0xffffff]},
+    {id:'firetruck',n:12,sp:1.0,P:mcarP('r_firetruck',()=>truck()),o:mcarO('r_firetruck',{L:.6,lightY:.085}),cols:[0xffffff]},
+    {id:'hearse',n:8,sp:.95,P:mcarP('c_van',()=>passenger(MPV)),o:mcarO('c_van',MPV),cols:[0x15151a]}]:[]),
   {id:'bus',n:14,sp:.95,P:mcarP('r_bus',()=>bus()),o:mcarO('r_bus',{L:.818,lightY:.083}),cols:HASCARS?[0xffffff]:[0x1e88e5,0xd32f2f,0x2a9d8f,0xf2c14e]},
   {id:'truck',n:KV?6:8,sp:1.0,P:truck(),o:{L:.6,lightY:.085},cols:[0xb71c1c,0x1f3a5f,0xf2f2f2,0x1b7f3b,0xe67e22]},
   ...(KV?[{id:'kvan',n:8,sp:1.1,P:mcarP('kv_van'),o:mcarO('kv_van'),cols:[0x2f5fc4,0xf2f2f2,0xc62828,0x37474f,0x2e7d32,0xf2c200]},
@@ -2532,11 +2588,11 @@ const VTYPES=[
     {id:'kdelflat',n:3,sp:1.0,P:mcarP('kv_delivery_flat'),o:mcarO('kv_delivery_flat'),cols:[0xd84315,0x37474f,0xf2f2f2]},
     {id:'kgarbage',n:2,sp:.9,P:mcarP('kv_garbage_truck'),o:mcarO('kv_garbage_truck'),cols:[0xffffff]}]:[]),
 ];
-const cars=[],TB_MAX=16;
+const cars=[],TB_MAX=16,SVCV={firetruck:1,ambulance:1,police:1,hearse:1};let EMS_PATROL=0;
 // realistic proportions: motorbikes ≈ 2 m, cars 4–5.3 m, jeepneys 7 m, trucks 8.5 m, buses 12 m (all a little wider-than-life for readability)
 const VSCALE={sedan:[.87,1],taxi:[.87,1],hatch:[.87,.97],coupe:[.86,.98],suv:[.86,.95],MPV:[.87,.9],pickup:[.86,.97],jeepney:[.9,1],bus:[.9,1],truck:[.9,1],motorcycle:[.64,.64],tricycle:[.72,.72]};
 // real-world lengths in metres (1 unit = 25 m): every vehicle is scaled to its true size
-const VREAL={kvan:4.9,ksports:4.6,khatch:4.3,ksuv:4.9,kpickup:5.3,kdelivery:6.5,kdelflat:6.5,kgarbage:8.5,pickup:5.3,MPV:4.9,coupe:4.7,sedan:4.8,hatch:4.0,suv:4.8,taxi:4.8,jeep:4.3,police:4.9,ambulance:6.0,firetruck:9.5,jeepney:7.2,bus:12,truck:9,motorcycle:2.0,tricycle:2.7};
+const VREAL={hearse:5.6,kvan:4.9,ksports:4.6,khatch:4.3,ksuv:4.9,kpickup:5.3,kdelivery:6.5,kdelflat:6.5,kgarbage:8.5,pickup:5.3,MPV:4.9,coupe:4.7,sedan:4.8,hatch:4.0,suv:4.8,taxi:4.8,jeep:4.3,police:4.9,ambulance:6.0,firetruck:9.5,jeepney:7.2,bus:12,truck:9,motorcycle:2.0,tricycle:2.7};
 for(const v of VTYPES){let[ssx,ssl]=v.o.model?(v.id==='bus'?[.7,1]:[.92,1]):VSCALE[v.id]||[1,1];if(VREAL[v.id]){const f=VREAL[v.id]/25/(v.o.L*ssl);ssx*=f;ssl*=f;}scaleP(v.P,ssx,ssl,ssl);v.L=v.o.L*ssl;v.ly=v.o.lightY*ssl;v.fxs=(v.o.fx||(v.id==='bus'||v.id==='truck'?1.2:1))*ssx;v.meshes=[];
   for(const k in MATS){if(!v.P[k].length)continue;const m=new THREE.InstancedMesh(mergeG(v.P[k]),v.o.model&&MATS_M[k]?MATS_M[k]:MATS[k],v.n+(v.id==='bus'?TB_MAX:0));m.castShadow=(k==='paint'||k==='det');m.frustumCulled=false;scene.add(m);v.meshes.push(m);v[k]=m;}
   for(let i=0;i<v.n;i++){v.paint.setColorAt(i,new THREE.Color(v.cols[i%v.cols.length]));if(v.tail)v.tail.setColorAt(i,new THREE.Color(1,1,1));
@@ -3006,17 +3062,18 @@ function updateCars(dt){
   // cyclists and scooter riders who share the carriageway (streets without a bike lane)
   const riders=new Map();for(const o of peds)if(o.shown&&o.a&&(o.kind==='bike'||o.kind==='scoot')&&!o.a.bk&&rtOf(o.a).lanes<2){const kk=key(o.a);(riders.get(kk)||riders.set(kk,[]).get(kk)).push(o);}carsOnTile=onTile;
   for(let k=0;k<CARS;k++){const c=cars[k];
-    if(k>=active&&!c.line&&!c.emerg){if(c.a||c.shown!==false){setCar(c,k,true);c.shown=false;}c.a=null;continue;}
+    if(SVCV[c.v.id]&&!c.emerg&&!(c.v.id==='police'&&c.i<EMS_PATROL)){if(c.a||c.shown!==false){setCar(c,k,true);c.shown=false;}c.a=null;c.route=null;continue;}
+    if(k>=active&&!c.line&&!c.emerg&&!SVCV[c.v.id]){if(c.a||c.shown!==false){setCar(c,k,true);c.shown=false;}c.a=null;continue;}
     if(c.v.id==='bus'&&!c.line){if(c.a||c.shown!==false){setCar(c,k,true);c.shown=false;}c.a=null;continue;}
     if(c.line&&(!c.a||!c.a.road||!c.b||!c.b.road)){lineEnd(c,false);if(c.shown!==false)setCar(c,k,true);c.shown=false;c.a=null;continue;}
     if(!c.a||!c.a.road||!c.b||!c.b.road||(c.prev&&!c.prev.road)){if(!spawnCar(c,roads,onTile,k<active*.5&&!c.everShown)){if(c.shown!==false)setCar(c,k,true);c.shown=false;c.a=null;continue;}}c.everShown=true;
     c.shown=true;if(c.cur==null)c.cur=c.sp*.6;
     // distance (in tile units along the path) to the nearest car ahead in the same lane
     let lead=9,leadL=0;const mlA=rtOf(c.a).lanes>1,mlB=rtOf(c.b).lanes>1,merge=mlA&&!mlB&&c.p>.4;
-    for(const o of onTile.get(key(c.a))||[]){if(o!==c&&o.b===c.b&&o.p>c.p&&(!mlA||o.lane===c.lane||merge)){const d=o.p-c.p;if(d<lead){lead=d;leadL=o.v.L;}}}
+    for(const o of onTile.get(key(c.a))||[]){if(o!==c&&o.b===c.b&&o.p>c.p&&o.emerg!=='work'&&(!mlA||o.lane===c.lane||merge)){const d=o.p-c.p;if(d<lead){lead=d;leadL=o.v.L;}}}
     if(!mlA)for(const o of riders.get(key(c.a))||[]){if(o.b===c.b&&o.p>c.p){const d=o.p-c.p+.03;if(d<lead){lead=d;leadL=.07;}}}
     if(!mlB&&c.b!==c.a&&c.p>.5)for(const o of riders.get(key(c.b))||[]){if(o.prev===c.a&&o.p<.5){const d=1-c.p+o.p+.03;if(d<lead){lead=d;leadL=.07;}}}
-    if(c.b!==c.a)for(const o of onTile.get(key(c.b))||[]){if(o===c||o.b===c.a)continue;if(o.prev!==c.a&&o.p>.55)continue;if(mlB&&o.lane!==c.lane)continue;const d=(1-c.p)+o.p;if(d<lead){lead=d;leadL=o.v.L;}}
+    if(c.b!==c.a)for(const o of onTile.get(key(c.b))||[]){if(o===c||o.b===c.a||o.emerg==='work')continue;if(o.prev!==c.a&&o.p>.55)continue;if(mlB&&o.lane!==c.lane)continue;const d=(1-c.p)+o.p;if(d<lead){lead=d;leadL=o.v.L;}}
     // overtaking on multi-lane roads: move over when blocked and the other lane is clear
     c.lct=(c.lct||0)-dt;
     if(mlA&&c.lct<=0&&lead<.75&&c.p<.6){const ol=1-c.lane;let free=true;
@@ -3028,21 +3085,21 @@ function updateCars(dt){
     let target=c.sp*rtOf(c.a).sp*clamp((lead-gmin)/(safe-gmin),0,1);
     // traffic signal: ease to a stop at the line
     const pStop=.8-c.v.L/2;let sigStop=false;
-    if(c.emerg==='go'||c.emerg==='back')target=Math.min(c.sp*1.6*rtOf(c.a).sp*clamp((lead-gmin)/(safe-gmin),0,1)+(lead>8?.15:0),c.sp*1.9);// sirens: a little faster, no stop at red lights
-    if(c.emerg!=='go'&&c.b!==c.a&&interSet.has(key(c.b))&&!interSet.has(key(c.a))&&c.p<=pStop+.002){const st=lightState(c.b,c.b.x!==c.a.x);
+    if((c.emerg==='go'||c.emerg==='back')&&c.siren)target=c.sp*clamp(rtOf(c.a).sp*1.6,.75,1.9)*clamp((lead-gmin)/(safe-gmin),0,1);// sirens: a little faster, no stop at red lights
+    if(!(c.emerg==='go'&&c.siren)&&c.b!==c.a&&interSet.has(key(c.b))&&!interSet.has(key(c.a))&&c.p<=pStop+.002){const st=lightState(c.b,c.b.x!==c.a.x);
       if(st===2||(st===1&&c.p<pStop-.18)){const ds=pStop-c.p;target=Math.min(target,c.sp*clamp(ds/.3,0,1));sigStop=true;}}
     if(c.b!==c.a&&c.b.rail&&!c.a.rail&&crossBusy.has(key(c.b))&&c.p<=pStop+.002){target=Math.min(target,c.sp*clamp((pStop-c.p)/.3,0,1));sigStop=true;}
     // people on a zebra crossing: stop before it
     let xStop=null;if(xwBusy.size){const xs=.5-.09-c.v.L/2;if(xwBusy.has(key(c.a))&&c.p<=xs+.002)xStop=xs;else if(c.b!==c.a&&xwBusy.has(key(c.b))&&c.p>.2)xStop=1+xs;}
     // signs and markings: posted limits, school zones, humps, SLOW, stop and yield before junctions
     {const a=c.a,js=c.b&&c.b!==c.prev&&c.b!==a&&isJn(c.b)?jSg(a,c.b):null;if(a.sg||a.mk||js){if(a.sg&&a.sg!=='stop'&&a.sg!=='yield')target*=Math.min(1.3,tileLimit(a)/(rtOf(a).kmh||30));if(a.mk==='hump')target=Math.min(target,c.sp*.3);else if(a.mk==='slow')target*=.6;
-      if(js&&c.sgK!==a){if(js==='yield'){if(c.p>.55)target=Math.min(target,c.sp*.35);const xs=.93-c.v.L/2;if(c.p<xs+.01&&c.p>xs-.25){let busy=0;for(const o of onTile.get(key(c.b))||[])if(o!==c&&o.a===c.b)busy++;if(busy>=(ixOf(c.b)==='round'?2:1)){xStop=xStop==null?xs:Math.min(xStop,xs);target=Math.min(target,c.sp*clamp((xs-c.p)/.3,0,1));}}}
+      if(js&&c.sgK!==a&&!(c.emerg==='go'&&c.siren)){if(js==='yield'){if(c.p>.55)target=Math.min(target,c.sp*.35);const xs=.93-c.v.L/2;if(c.p<xs+.01&&c.p>xs-.25){let busy=0;for(const o of onTile.get(key(c.b))||[])if(o!==c&&o.a===c.b)busy++;if(busy>=(ixOf(c.b)==='round'?2:1)){xStop=xStop==null?xs:Math.min(xStop,xs);target=Math.min(target,c.sp*clamp((xs-c.p)/.3,0,1));}}}
         else if(c.sgT>0){c.sgT-=dt;target=0;xStop=c.p;if(c.sgT<=0)c.sgK=a;}else{const xs=.93-c.v.L/2;if(c.p<xs+.01){xStop=xStop==null?xs:Math.min(xStop,xs);target=Math.min(target,c.sp*clamp((xs-c.p)/.3,.1,1));if(c.p>xs-.02){c.sgT=rnd(1,1.8);c.cur=0;}}}}}}
     if(c.v.id==='bus'&&c.a.bs&&c.b!==c.prev&&c.bsK!==c.a){if(c.bsT>0){c.bsT-=dt;target=0;xStop=c.p;if(c.bsT<=0)c.bsK=c.a;}
       else if(c.p<.505&&!(c.p>.3&&c.bsSp===c.a)){xStop=xStop==null?.5:Math.min(xStop,.5);target=Math.min(target,c.sp*clamp((.5-c.p)/.3,.1,1));if(c.p>.48){c.bsT=rnd(6,10);c.cur=0;busBoard(c);}}}
     if(c.a.toll&&c.b!==c.prev&&c.tlK!==c.a){if(c.tlT>0){c.tlT-=dt;target=0;xStop=c.p;if(c.tlT<=0){c.tlK=c.a;const fee=G.tollFee??TOLL_FEE;G.money+=fee;G.tollInc=(G.tollInc||0)+fee;}}
       else if(c.p<.425){xStop=xStop==null?.42:Math.min(xStop,.42);target=Math.min(target,c.sp*clamp((.42-c.p)/.3,.15,1));if(c.p>.4){c.tlT=rnd(.4,.9);c.cur=0;}}}
-    if(c.emerg){if((c.emerg==='go'||c.emerg==='back')&&c.a===c.emDest){if(c.emerg==='back'){c.emerg=null;c.emDest=null;c.route=null;}else{xStop=xStop==null?.5:Math.min(xStop,.5);if(c.p>=.47&&c.cur<.05)c.emerg='work';}}
+    if(c.emerg){if((c.emerg==='go'||c.emerg==='back')&&c.a===c.emDest){if(c.emerg==='back'){c.emerg=null;c.emDest=null;c.route=null;c.siren=false;}else{xStop=xStop==null?.5:Math.min(xStop,.5);if(c.p>=.47&&c.cur<.05)c.emerg='work';}}
       if(c.emerg==='work'){target=0;xStop=c.p;}}
     if(xStop!=null)target=Math.min(target,c.sp*clamp((xStop-c.p)/.3,0,1));
     const acc=.7,dec=3.2,dv=target-c.cur;c.cur+=clamp(dv,-dec*dt,acc*dt);if(c.cur<.004)c.cur=0;
@@ -3056,7 +3113,7 @@ function updateCars(dt){
     else if((c.a.ix==='ichg'||c.a.ix==='round')&&c.b&&c.prev&&c.b!==c.prev&&c.prev!==c.a){if(c._plA!==c.a||c._plB!==c.b){c._plA=c.a;c._plB=c.b;c._pl=c.a.ix==='ichg'?ichgLen(c.a,c.prev,c.b,c.offC):1.4;}step/=clamp(c._pl,.5,6);}
     c.p+=step;
     if(c.p>=1){c.p-=1;c.prev=c.a;c.a=c.b;c.bsK=null;c.bsT=0;c.sgK=null;c.sgT=0;if(!nextHop(c)){if(c.line)lineEnd(c,true);setCar(c,k,true);c.shown=false;c.a=null;c.route=null;continue;}}
-    let lo=laneOff(c.a,c.lane||0);if(c.v.id==='bus'&&c.a.bs&&c.b!==c.prev&&c.bsK!==c.a)lo=Math.max(lo,rtOf(c.a).cw-.055);if(c.offC==null)c.offC=lo;c.offC+=(lo-c.offC)*Math.min(1,dt*2.6);
+    let lo=laneOff(c.a,c.lane||0);if(c.emerg==='work')lo=Math.max(lo,rtOf(c.a).cw-.05);if(c.v.id==='bus'&&c.a.bs&&c.b!==c.prev&&c.bsK!==c.a)lo=Math.max(lo,rtOf(c.a).cw-.055);if(c.offC==null)c.offC=lo;c.offC+=(lo-c.offC)*Math.min(1,dt*2.6);
     _pcar=c;const pp=pathAt(c.a,c.prev,c.b,c.p,c.offC),y=surfY(c.a,pp.x,pp.z);_pcar=null;_ppH=null;
     c.pos.set(pp.x,y,pp.z);c.yaw=Math.atan2(pp.tx,pp.tz);const d=c.a._ramp,pitch=d?-Math.atan(((d[3]??.13)-(d[2]??0))*(pp.tx*d[0]+pp.tz*d[1])):0;
     dummy.position.copy(c.pos);dummy.rotation.set(pitch,c.yaw,0,'YXZ');dummy.scale.set(1,1,1);setCar(c,k,false);dummy.rotation.order='XYZ';
@@ -3969,7 +4026,7 @@ function renderSheet(){
     $('eClose').onclick=()=>{sheet.classList.remove('open');selT=null;};$('eDel').onclick=()=>{demolish([t],'demB');sheet.classList.remove('open');};clearTimeout(renderSheet._t);renderSheet._t=setTimeout(()=>{if(selT===t&&sheet.classList.contains('open'))renderSheet();},1000);return;}
   if(dirty||!cov)computeCoverage();
   const v=cov[key(t)];const isZ=!!b.zone;const s=SERV[b.kind];
-  const covList=['power','water','police','fire','health','edu','park','transit'].map(k=>`<span style="color:${v[k]?'var(--good)':'var(--bad)'}">${k}</span>`).join(' · ');
+  const covList=['power','water','police','fire','health','death','edu','park','transit'].map(k=>`<span style="color:${v[k]?'var(--good)':'var(--bad)'}">${k==='death'?'deathcare':k}</span>`).join(' · ');
   let h=`<button class="close" id="eClose">Close</button><h2>${b.name||({R:'Residence',C:'Commerce',I:'Industry'}[b.zone]+' L'+b.level)}</h2>`;
   h+=`<div class="kv">`+(isZ?`<div><b>${cap(b)}</b><small>${b.zone==='R'?'residents':'jobs'}</small></div><div><b>${b.hap??'–'}%</b><small>happiness</small></div><div><b>${b.floors}</b><small>floors</small></div>`
     :s.cat==='tr'?(()=>{const ts=terminalStats(b),cn=termConnected(t),fo=fleetOK(b),op=ts.ok&&cn&&fo;return`<div><b style="color:${op?'var(--good)':'var(--bad)'}">${op?'Open':'Closed'}</b><small>${!cn?CONN_HINT[b.kind]:!ts.ok?'design the interior: add platforms and an entrance':!fo?'buy '+FLEET[b.kind].vs+' below':'operating'}</small></div><div><b>${ts.cap.toLocaleString()}</b><small>capacity / day</small></div><div><b>${(b.riders||0).toLocaleString()}</b><small>riders / day</small></div><div><b>${ts.comfort}</b><small>comfort</small></div>`})()
@@ -4388,14 +4445,14 @@ const BUILD=[
   {id:'roads',label:'Roads',items:['road','avenue','boulevard','highway','junction','toll','xwalk','xover','xunder','busstop','roadsign','roadmark']},
   {id:'zones',label:'Zones',items:['R','C','I','unzone']},
   {id:'util',label:'Utilities',items:['power','solar','wind','water','watertreat']},
-  {id:'svc',label:'Services',items:['police','policehq','fire','clinic','hospital','school','highschool','university','library']},
+  {id:'svc',label:'Services',items:['police','policehq','fire','clinic','hospital','funeral','school','highschool','university','library']},
   {id:'parks',label:'Parks',items:['park','plaza','playground','park2','sports','bigpark']},
   {id:'transit',label:'Transit',items:['lines','bus','buslane','metro','metroline','mstop','train','rail','airport','runway','taxiway']},
   {id:'sea',label:'Sea',items:['port','ferry','shipyard']},
   {id:'special',label:'Landmarks',items:['cityhall','church','museum','mall','ferris','obstower','stadium']},
 ];
 const DESC={road:['Street','Two lanes with sidewalks. Over the river it becomes a bridge.','#5b6168'],avenue:['Avenue','Four lanes, faster traffic. Lane markings and pedestrian crossings.','#4a5058'],boulevard:['Boulevard','Four lanes split by a tree-lined median. Looks great, moves well.','#4f7a45'],highway:['Highway','Four fast lanes with a barrier. No sidewalks and no driveways, so nothing grows beside it.','#3e5f80'],rail:['Rail track','Drag to lay track. Trains run between connected train stations. Crosses roads with level crossings.','#8d6e4a'],metroline:['Metro line','Elevated viaduct over roads and rivers. Metro trains run between connected stations.','#8d5bd6'],runway:['Runway','Straight runway of 5+ tiles touching the airport. Planes take off and land.','#5a5f66'],taxiway:['Taxiway','Link the runway to the row in front of the airport gates. Planes land, taxi in, park at the gates and taxi back out.','#c9a227'],xwalk:['Crosswalk','Zebra crossing. Tap a straight street for a mid-block crossing (cars stop for people) or a junction for crossings on every side. People only cross the street at crosswalks, bridges and tunnels.','#e0e0e0'],xover:['Footbridge','Pedestrian overpass with stairs on both sidewalks. People cross above the traffic. Straight streets only.','#64b5f6'],xunder:['Pedestrian underpass','Stairs down to a tunnel under the street. Straight streets only.','#78909c'],lines:['Transit lines','Draw bus, metro and train lines: pick a terminal or station, then the stops in order. Vehicles follow the line and show its colour.','#e53935'],mstop:['Metro stop','A small stop built right on the metro line: two side platforms, stairs and a lift. Trains stop here and it covers the streets around it. Needs a metro station with trains somewhere on the line.','#8d5bd6'],toll:['Toll plaza','A toll plaza across a highway. Every car pays a toll as it passes (it slows down at the booths).','#b8860b'],junction:['Intersection','Choose how a junction works: traffic lights, all-way stop, priority road, roundabout or no control. Tap junctions to change them.','#2f7fb5'],roadsign:['Road sign','Stop, yield, speed limits and school zones. Drivers obey them: they stop, give way and keep to the posted speed.','#d32f2f'],roadmark:['Road marking','Speed humps and SLOW markings. Drivers slow down over them.','#9e9e9e'],busstop:['Bus stop','Shelters on both sidewalks. Buses pull over here and people wait for them. Straight streets only.','#1e88e5'],buslane:['Bus lane','Paint red bus lanes on straight roads. Buses and jeepneys move faster.','#c62828'],R:['Residential','Homes. Drag an area next to a road.','#4caf50'],C:['Commercial','Shops and offices. Needs residents nearby.','#2f8fd8'],I:['Industrial','Factories and jobs. Pollutes nearby homes.','#e0a020'],unzone:['Remove zoning','Drag to clear zoning from empty lots.','#d9774a'],
-  power:'Powers every building within 16 tiles. Pollutes the area.',solar:'Clean power for 12 tiles around it.',water:'Water for buildings within 11 tiles.',park:'Paths, fountain, benches and flowers. People visit it.',plaza:'Paved square with a tiered fountain and statue.',playground:'Slide, swings, seesaw and sandbox for families.',park2:'Pond, gazebo, winding path and shady trees.',sports:'Football field, running track, stands and floodlights.',bigpark:'Lake with an island, jogging loop, pavilion and playground. Big happiness boost.',wind:'Clean power for 9 tiles. Blades turn in the wind.',police:'Safety coverage, 9 tiles.',fire:'Fire coverage, 9 tiles.',school:'Education, 10 tiles. Helps buildings level up.',hospital:'Healthcare, 12 tiles.',
+  power:'Powers every building within 16 tiles. Pollutes the area.',solar:'Clean power for 12 tiles around it.',water:'Water for buildings within 11 tiles.',park:'Paths, fountain, benches and flowers. People visit it.',plaza:'Paved square with a tiered fountain and statue.',playground:'Slide, swings, seesaw and sandbox for families.',park2:'Pond, gazebo, winding path and shady trees.',sports:'Football field, running track, stands and floodlights.',bigpark:'Lake with an island, jogging loop, pavilion and playground. Big happiness boost.',wind:'Clean power for 9 tiles. Blades turn in the wind.',police:'Safety coverage, 9 tiles. Patrol cars answer calls; level 3 adds a police helicopter.',fire:'Fire coverage, 9 tiles. Fire engines respond to fires; level 3 adds a water-bombing helicopter.',school:'Education, 10 tiles. Helps buildings level up.',hospital:'Healthcare, 12 tiles. Ambulances answer calls; level 3 adds an air ambulance.',funeral:'Hearses collect the deceased from homes within 10 tiles. Covered homes are happier.',
   cityhall:'Domed civic hall with a clock, columns and a fountain plaza. Big happiness boost.',church:'Baroque stone church with a bell tower and a shaded plaza.',museum:'Stacked white galleries, a glass hall and a sculpture garden. Draws tourists.',mall:'Three-storey mall with a glass atrium and a big car park. Tourists shop here.',stadium:'Oval arena with floodlights and a full pitch. The biggest tourist draw.',obstower:'Slender tower with an observation deck and beacon lights.',ferris:'A turning Ferris wheel with coloured cabins, lit at night.',
   clinic:'Small health centre with an ambulance bay. Covers 7 tiles.',library:'Columned reading hall and garden. Education plus a little happiness.',highschool:'Classrooms, gym hall, football field and basketball court.',university:'Domed main hall, clock tower, science block, dorms and a green quad. Huge education reach.',policehq:'Big station with a helipad, atrium and patrol fleet. Covers 16 tiles.',watertreat:'Clarifier tanks and settling basins. Clean water for 19 tiles, no pollution.',
   port:'Container quay with ship-to-shore cranes. Cargo ships call here. Big boost for industry and trade income. Build it on the coast.',ferry:'Passenger terminal with a boarding gangway. Ferries berth here, load passengers and sail. Counts as public transit. Build it on the coast.',shipyard:'Dry dock with a goliath crane and a hull under construction. Jobs and trade income. Build it on the coast.',
@@ -4428,7 +4485,7 @@ rail:'<path d="M14 4 11 36M26 4l3 32" stroke="#fff" stroke-width="3"/><path d="M
   bigpark:'<circle cx="11" cy="14" r="6" fill="#fff"/><circle cx="29" cy="13" r="6" fill="#fff"/><circle cx="20" cy="10" r="6" fill="#fff"/><ellipse cx="20" cy="29" rx="13" ry="5" fill="#fff"/>',
   wind:'<path d="M20 20 20 6M20 20 32 27M20 20 8 27" stroke="#fff" stroke-width="3" stroke-linecap="round"/><path d="M19 20h2l1 15h-4z" fill="#fff"/>',
   police:'<path d="M20 6l11 4v9c0 8-5 12-11 15-6-3-11-7-11-15v-9z" fill="#fff"/>',fire:'<path d="M20 5c2 6 9 9 9 17a9 9 0 0 1-18 0c0-4 2-6 4-8 0 3 2 5 3 5-1-5 0-10 2-14z" fill="#fff"/>',
-  school:'<path d="M5 16 20 9l15 7-15 7z" fill="#fff"/><path d="M11 20v7c3 3 15 3 18 0v-7l-9 4z" fill="#fff"/>',hospital:'<path d="M16 7h8v9h9v8h-9v9h-8v-9H7v-8h9z" fill="#fff"/>',
+  school:'<path d="M5 16 20 9l15 7-15 7z" fill="#fff"/><path d="M11 20v7c3 3 15 3 18 0v-7l-9 4z" fill="#fff"/>',hospital:'<path d="M16 7h8v9h9v8h-9v9h-8v-9H7v-8h9z" fill="#fff"/>',funeral:'<path d="M20 6c3 3 4 6 4 9a4 4 0 0 1-8 0c0-3 1-6 4-9z" fill="#fff"/><path d="M19 18h2v14h-2z" fill="#fff"/><path d="M20 30c-3-5-8-6-11-5 2 5 6 7 11 7zM20 30c3-5 8-6 11-5-2 5-6 7-11 7z" fill="#fff"/>',
   bus:'<rect x="9" y="6" width="22" height="25" rx="4" fill="#fff"/><rect x="12" y="10" width="16" height="9" fill="currentColor"/><circle cx="14" cy="34" r="2.5" fill="#fff"/><circle cx="26" cy="34" r="2.5" fill="#fff"/>',
   metro:'<circle cx="20" cy="20" r="14" fill="#fff"/><path d="M12 27V13l8 9 8-9v14" stroke="currentColor" stroke-width="3" fill="none"/>',
   train:'<path d="M11 8h18a3 3 0 0 1 3 3v17H8V11a3 3 0 0 1 3-3z" fill="#fff"/><rect x="11" y="12" width="18" height="7" fill="currentColor"/><path d="M12 30l-3 5M28 30l3 5" stroke="#fff" stroke-width="2.5"/>',
@@ -4517,7 +4574,7 @@ function openBuild(){
   bmenu.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{bTab=b.dataset.tab;openBuild();bmenu.querySelector('.bcards').scrollTop=0;});
   bmenu.querySelectorAll('[data-b]').forEach(b=>b.onclick=()=>{clearPreview();tool=b.dataset.b;cat='build';bmenu.classList.remove('open');renderCats();});
 }
-const COVN={trade:'Port & shipyard',landmark:'Landmarks',power:'Power',water:'Water',police:'Police',fire:'Fire',edu:'Education',health:'Health',park:'Parks',transit:'Transit'};
+const COVN={trade:'Port & shipyard',landmark:'Landmarks',power:'Power',water:'Water',police:'Police',fire:'Fire',edu:'Education',health:'Health',death:'Deathcare',park:'Parks',transit:'Transit'};
 const LV_UP=[1,1.6,2.4];const svcUpkeep=b=>Math.round((FLEET[b.kind]?(b.fleet||0)*FLEET[b.kind].cost*.012:0)+uMod(b).up*SERV[b.kind].up*(SERV[b.kind].cat==='tr'?1:LV_UP[Math.min(3,b.lv||1)-1])*(b.fund??100)/100);
 function openBudget(){
   sheet.innerHTML=`<button class="close" id="eClose">Close</button><h2>Budget</h2>
@@ -4660,6 +4717,7 @@ const Radio=(()=>{
 $('bRadio').onclick=()=>Radio.open();
 
 /* ---------- disasters (optional): fires, earthquakes, floods and tornadoes ---------- */
+let NIGHT_I=0;
 const Disaster=(()=>{
   let mode=(()=>{try{return localStorage.getItem('metrob_dis2')||'normal';}catch(e){return'normal';}})();
   const RATE={off:0,rare:1/400,normal:1/160,often:1/60};
@@ -4683,58 +4741,162 @@ const Disaster=(()=>{
   const _steam=new THREE.Color(0xe4e8ec);
   /* the fire engine: the one firetruck in traffic is sent from the nearest fire station along the roads, parks by the burning
      building, two firefighters run a hose and the roof cannon sprays until the fire is out, then it drives back */
-  const FR=(()=>{const q=[];let cur=null,sirT=0;
-    const dropG=new THREE.SphereGeometry(.016,6,4),dropM=new THREE.MeshBasicMaterial({color:0xe6f4ff,transparent:true,opacity:.8,depthWrite:false}),ND=150,drops=new THREE.InstancedMesh(dropG,dropM,ND);drops.frustumCulled=false;drops.visible=false;scene.add(drops);
-    const mistM=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.28,depthWrite:false}),mist=[];for(let i=0;i<6;i++){const m=new THREE.Mesh(puffG,mistM);m.visible=false;scene.add(m);mist.push(m);}
-    const glowTex=(()=>{const c=document.createElement('canvas');c.width=c.height=64;const x=c.getContext('2d'),g=x.createRadialGradient(32,32,0,32,32,32);g.addColorStop(0,'rgba(255,255,255,1)');g.addColorStop(.25,'rgba(255,255,255,.6)');g.addColorStop(1,'rgba(255,255,255,0)');x.fillStyle=g;x.fillRect(0,0,64,64);return new THREE.CanvasTexture(c);})();
-    const mkGlow=col=>{const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex,color:col,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending}));sp.scale.setScalar(.16);sp.visible=false;scene.add(sp);return sp;};
-    const gR=mkGlow(0xff2020),gB=mkGlow(0x2a5cff);
-    const man=()=>{const g=new THREE.Group(),M=c=>new THREE.MeshLambertMaterial({color:c}),cyl=(r,h,c,y)=>{const m=new THREE.Mesh(new THREE.CylinderGeometry(r,r*.9,h,7),M(c));m.position.y=y;g.add(m);return m;};
-      cyl(.0075,.034,0x2b2b30,.017);cyl(.0105,.036,0xb07a2a,.05);const st=new THREE.Mesh(new THREE.BoxGeometry(.022,.003,.016),M(0xe8f060));st.position.y=.046;g.add(st);
-      const hd=new THREE.Mesh(new THREE.SphereGeometry(.0085,8,6),M(0xd9a77c));hd.position.y=.075;g.add(hd);const hm=new THREE.Mesh(new THREE.SphereGeometry(.0105,8,6,0,6.3,0,1.6),M(0xffc400));hm.position.y=.078;g.add(hm);
-      const arm=new THREE.Mesh(new THREE.BoxGeometry(.006,.006,.03),M(0xb07a2a));arm.position.set(0,.056,.016);g.add(arm);g.visible=false;scene.add(g);return g;};
-    const m1=man(),m2=man(),hoseM=new THREE.LineBasicMaterial({color:0xc62828}),hose=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(),new THREE.Vector3(),new THREE.Vector3()]),hoseM);hose.frustumCulled=false;hose.visible=false;scene.add(hose);
-    const _m=new THREE.Matrix4(),_q=new THREE.Quaternion(),_s=new THREE.Vector3(),_p=new THREE.Vector3(),_a=new THREE.Vector3(),_b=new THREE.Vector3(),_c=new THREE.Vector3();
-    const truck=()=>HASCARS?cars.find(c=>c.v.id==='firetruck'):null;
+  /* ---------- emergency & city services (EMS) ----------
+     Every fire station, police station / HQ, hospital / clinic and funeral home owns vehicles (more per level). Fires and random calls
+     (medical emergencies, police calls, deaths at home) send the nearest free vehicle along the roads; crews get out and do the job,
+     then the vehicle drives back and parks. Level-3 fire stations, police stations and hospitals keep a helicopter on the roof. */
+  const FR=(()=>{
+    const SV={fire:{v:'firetruck',kinds:['fire'],cap:(k,lv)=>lv,siren:1},police:{v:'police',kinds:['police','policehq'],cap:(k,lv)=>k==='policehq'?2+lv*2:lv+1,siren:1},
+      health:{v:'ambulance',kinds:['hospital','clinic'],cap:(k,lv)=>k==='hospital'?lv+1:1,siren:1},death:{v:'hearse',kinds:['funeral'],cap:(k,lv)=>lv,siren:0}};
+    let ST=[],stT=0,sirT=0;const jobs=[],callT={police:20,health:28,death:40};
+    const _p=new THREE.Vector3(),_s=new THREE.Vector3(),_q=new THREE.Quaternion(),_m=new THREE.Matrix4();
     const lot=t=>{const b=t.b,lx=b.zone?LX(b):(b.size||1),lz=b.zone?LZ(b):(b.size||1),r=[];for(let i=0;i<lx;i++)for(let j=0;j<lz;j++){const u=T(t.x+i,t.z+j);if(u)r.push(u);}return r;};
     const near=t=>{const S=new Set();for(const u of lot(t))for(const[dx,dz]of[[0,-1],[1,0],[0,1],[-1,0]]){const n=T(u.x+dx,u.z+dz);if(n&&n.road&&!n.water&&n.rt!=='h'&&roadNeighbors(n).length)S.add(n);}return[...S];};
-    function send(f){const c=truck();if(!c||!f.t.b)return false;const[cx,cz]=center(f.t),D=near(f.t).sort((a,b)=>Math.hypot(wx(a.x)-cx,wx(a.z)-cz)-Math.hypot(wx(b.x)-cx,wx(b.z)-cz));if(!D.length)return false;
-      // start from where the engine is (after a call) or from the nearest station
-      let from=c.emerg==='back'&&c.a&&c.a.road?[c.a]:G.tiles.filter(t=>t.b&&t.b.kind==='fire').sort((a,b)=>Math.hypot(a.x-f.t.x,a.z-f.t.z)-Math.hypot(b.x-f.t.x,b.z-f.t.z)).flatMap(near);
-      for(const s of from)for(const d of D){const rt=route(s,d,30000);if(!rt)continue;const cont=c.emerg==='back'&&c.a===s;
-        if(!cont){c.a=s;c.prev=s;c.p=.5;c.cur=0;c.offC=null;c._cnJ=null;c.x2J=null;c.x2=null;c.lane=0;c.everShown=true;}
-        c.route=rt.length>1?rt:null;c.ri=0;if(rt.length>1&&!cont)c.b=rt[1];else if(!cont)c.b=roadNeighbors(s)[0];c.done=false;c.emerg='go';c.emDest=d;
-        f.truck=true;cur={f,c,home:cont?c.home:s};c.home=cur.home;sirT=0;return true;}
-      return false;}
-    function call(f){if(cur){q.push(f);return;}if(!send(f))f.auto=true;}
-    function ended(f){const i=q.indexOf(f);if(i>=0)q.splice(i,1);if(!cur||cur.f!==f)return;const c=cur.c;cur=null;hide();
-      while(q.length){const n=q.shift();if(n.t.b&&send(n))return;n.auto=true;}
-      if(c&&c.home){c.emerg='back';c.emDest=c.home;const r=c.a&&route(c.a,c.home,30000);if(r&&r.length>1){c.route=r;c.ri=0;c.done=false;}else{c.emerg=null;c.emDest=null;}}else if(c){c.emerg=null;c.emDest=null;}}
-    function hide(){drops.visible=false;hose.visible=false;m1.visible=m2.visible=false;mist.forEach(m=>m.visible=false);}
-    function update(dt,now){const c=truck();
-      if(c&&c.emerg&&c.shown&&c.pos){const on=Math.floor(now*7)%2===0,fx=Math.sin(c.yaw),fz=Math.cos(c.yaw),rx=fz,rz=-fx,hy=c.v.ly/.42*.95+.01,lz=c.v.L*.3;
-        gR.position.set(c.pos.x+fx*lz+rx*.03,c.pos.y+hy,c.pos.z+fz*lz+rz*.03);gB.position.set(c.pos.x+fx*lz-rx*.03,c.pos.y+hy,c.pos.z+fz*lz-rz*.03);gR.visible=on;gB.visible=!on;
-        if(c.emerg==='go'){sirT-=dt;if(sirT<=0){sirT=.86;if(tileSeen(c.a)&&cam.dist<26)Snd.play('siren');}}}
-      else{gR.visible=gB.visible=false;}
-      if(!cur||!c||c!==cur.c){hide();return;}const f=cur.f;if(!f.t.b){hide();return;}
-      if(c.emerg!=='work'){hide();return;}
-      // at work: firefighters, hose and water
-      const[cx,cz]=center(f.t),fx=Math.sin(c.yaw),fz=Math.cos(c.yaw),ty=Math.min(f.h*.8,f.h-.02)+.02;
-      const tx=cx-c.pos.x,tz=cz-c.pos.z,dd=Math.hypot(tx,tz)||1,ux=tx/dd,uz=tz/dd;
-      const mpx=c.pos.x+ux*Math.min(.3,dd*.4)-fx*c.v.L*.25,mpz=c.pos.z+uz*Math.min(.3,dd*.4)-fz*c.v.L*.25,gy=c.pos.y;
-      m1.position.set(mpx,gy,mpz);m1.rotation.y=Math.atan2(cx-mpx,cz-mpz);m1.visible=true;
-      m2.position.set(c.pos.x-fx*c.v.L*.55+ux*.06,gy,c.pos.z-fz*c.v.L*.55+uz*.06);m2.rotation.y=Math.atan2(mpx-m2.position.x,mpz-m2.position.z)+Math.sin(now*1.3)*.4;m2.visible=true;
-      {const P=hose.geometry.attributes.position;P.setXYZ(0,c.pos.x-fx*c.v.L*.4,gy+.03,c.pos.z-fz*c.v.L*.4);P.setXYZ(1,(m1.position.x+m2.position.x)/2,gy+.003,(m1.position.z+m2.position.z)/2);P.setXYZ(2,mpx+Math.sin(m1.rotation.y)*.02,gy+.056,mpz+Math.cos(m1.rotation.y)*.02);P.needsUpdate=true;hose.visible=true;}
-      // two streams: roof cannon (high arc) and the hose (low arc)
-      const nz=[c.pos.x+fx*c.v.L*.1,c.pos.y+c.v.ly/.42+.02,c.pos.z+fz*c.v.L*.1],hz=[mpx+Math.sin(m1.rotation.y)*.03,gy+.058,mpz+Math.cos(m1.rotation.y)*.03];
-      let n=0;for(const[src,cnt,arc,spd]of[[nz,90,.3+dd*.2,1.1],[hz,60,.12+dd*.12,1.5]]){for(let i=0;i<cnt;i++,n++){const t=(now*spd+i/cnt+i*.618)%1,j=i*12.9898,jx=Math.sin(j)*.06*t*f.S,jz=Math.cos(j*1.7)*.06*t*f.S,jy=Math.sin(j*2.3)*.04*t;
-        const ex=cx+jx,ez=cz+jz,ey=ty+jy,mx=(src[0]+ex)/2,mz=(src[2]+ez)/2,my=Math.max(src[1],ey)+arc;_p.set((1-t)*(1-t)*src[0]+2*(1-t)*t*mx+t*t*ex,(1-t)*(1-t)*src[1]+2*(1-t)*t*my+t*t*ey,(1-t)*(1-t)*src[2]+2*(1-t)*t*mz+t*t*ez);
-        _s.setScalar(.6+t*1.8);_m.compose(_p,_q,_s);drops.setMatrixAt(n,_m);}}
-      drops.count=n;drops.instanceMatrix.needsUpdate=true;drops.visible=true;
-      mist.forEach((m,i)=>{const p=(now*.5+i/mist.length)%1;m.position.set(cx+Math.sin(i*2.1)*.12*f.S,ty+p*.35,cz+Math.cos(i*1.3)*.12*f.S);m.scale.setScalar((.4+p*1.4)*f.S);m.visible=f.k>0;});
-      mistM.opacity=.3;
+    const dist=(a,x,z)=>Math.hypot(wx(a.x)-x,wx(a.z)-z);
+    function stations(){stT=2;ST=[];for(const t of G.tiles){const b=t.b;if(!b||b.uc||!b.kind||t.ref!=null)continue;for(const k in SV)if(SV[k].kinds.includes(b.kind))ST.push({t,svc:k,cap:SV[k].cap(b.kind,Math.min(3,b.lv||1)),out:0});}
+      for(const j of jobs){const s2=ST.find(q=>q.t===j.st.t);if(s2){s2.out++;j.st=s2;}}
+      EMS_PATROL=ST.filter(q=>q.svc==='police').reduce((a,q)=>a+q.cap,0);syncHelis();}
+    // ---- crew figures ----
+    const gBody=new THREE.CylinderGeometry(.0105,.0095,.036,7).translate(0,.05,0),gLegs=new THREE.CylinderGeometry(.0075,.0068,.034,7).translate(0,.017,0),gHead=new THREE.SphereGeometry(.0085,8,6).translate(0,.075,0),
+      gHelm=new THREE.SphereGeometry(.0105,8,6,0,6.3,0,1.6).translate(0,.078,0),gCap=new THREE.CylinderGeometry(.0095,.0095,.007,8).translate(0,.083,0),gBand=new THREE.CylinderGeometry(.0108,.0108,.004,7).translate(0,.046,0);
+    const MC={};const mat=c=>MC[c]||(MC[c]=new THREE.MeshLambertMaterial({color:c}));
+    const man=(coat,legs,hat,hatC,band)=>{const g=new THREE.Group();g.add(new THREE.Mesh(gLegs,mat(legs)));g.add(new THREE.Mesh(gBody,mat(coat)));g.add(new THREE.Mesh(gHead,mat(0xd9a77c)));
+      if(hat)g.add(new THREE.Mesh(hat==='helm'?gHelm:gCap,mat(hatC)));if(band)g.add(new THREE.Mesh(gBand,mat(band)));scene.add(g);return g;};
+    const CREW={fire:()=>[man(0xb07a2a,0x2b2b30,'helm',0xffc400,0xe8f060),man(0xb07a2a,0x2b2b30,'helm',0xffc400,0xe8f060)],
+      health:()=>[man(0x2e7d5b,0x2e7d5b,null,0,0xe8f060),man(0x2e7d5b,0x2e7d5b,null,0,0xe8f060)],police:()=>[man(0x1f3a5f,0x1b2433,'cap',0x111a2a,null)],death:()=>[man(0x1c1c1f,0x1c1c1f,null,0,null),man(0x1c1c1f,0x1c1c1f,null,0,null)]};
+    const gStr=new THREE.BoxGeometry(.03,.012,.085).translate(0,.032,0),gPat=new THREE.BoxGeometry(.026,.012,.07).translate(0,.044,0),gCas=new THREE.BoxGeometry(.03,.024,.085).translate(0,.05,0);
+    // ---- water spray (fire engines) ----
+    const dropG=new THREE.SphereGeometry(.016,6,4),dropM=new THREE.MeshBasicMaterial({color:0xe6f4ff,transparent:true,opacity:.8,depthWrite:false});
+    const mistM=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.3,depthWrite:false});
+    // ---- flashing lights ----
+    const glowTex=(()=>{const c=document.createElement('canvas');c.width=c.height=64;const x=c.getContext('2d'),g=x.createRadialGradient(32,32,0,32,32,32);g.addColorStop(0,'rgba(255,255,255,1)');g.addColorStop(.25,'rgba(255,255,255,.6)');g.addColorStop(1,'rgba(255,255,255,0)');x.fillStyle=g;x.fillRect(0,0,64,64);return new THREE.CanvasTexture(c);})();
+    const GM={};const glowM=col=>GM[col]||(GM[col]=new THREE.SpriteMaterial({map:glowTex,color:col,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending}));
+    const mkGlow=(col,sc=.16)=>{const sp=new THREE.Sprite(glowM(col));sp.scale.setScalar(sc);sp.visible=false;scene.add(sp);return sp;};
+    const glows=new Map();
+    function lights(now){for(const c of cars){const on=c.emerg&&c.siren&&c.shown&&c.pos&&c.a;let g=glows.get(c);if(!on){if(g){g[0].visible=g[1].visible=false;}continue;}
+      if(!g){const a=c.v.id==='ambulance'?0xff2020:c.v.id==='police'?0x2a5cff:0xff2020,b2=c.v.id==='firetruck'?0xff2020:c.v.id==='ambulance'?0xffffff:0xff2020;g=[mkGlow(a),mkGlow(c.v.id==='police'?0xff2020:b2===0xffffff?0x2a5cff:0x2a5cff)];glows.set(c,g);}
+      const fl=Math.floor(now*7+c.i*.37)%2===0,fx=Math.sin(c.yaw),fz=Math.cos(c.yaw),rx=fz,rz=-fx,hy=c.v.ly/.42*.95+.01,lz=c.v.L*.3;
+      g[0].position.set(c.pos.x+fx*lz+rx*.03,c.pos.y+hy,c.pos.z+fz*lz+rz*.03);g[1].position.set(c.pos.x+fx*lz-rx*.03,c.pos.y+hy,c.pos.z+fz*lz-rz*.03);g[0].visible=fl;g[1].visible=!fl;}}
+    // ---- dispatch ----
+    function dispatch(svc,t,o={}){if(!t||!t.b||!HASCARS)return null;const V=SV[svc].v,free=cars.filter(c=>c.v.id===V&&!c.emerg&&!c.job);if(!free.length)return null;
+      const[cx,cz]=center(t),used=new Set(jobs.map(j=>j.dest)),Dn=near(t).sort((a,b)=>(used.has(a)-used.has(b))||(dist(a,cx,cz)-dist(b,cx,cz)));if(!Dn.length)return null;
+      const sts=ST.filter(q=>q.svc===svc&&q.out<q.cap&&q.t.b).sort((a,b)=>Math.hypot(a.t.x-t.x,a.t.z-t.z)-Math.hypot(b.t.x-t.x,b.t.z-t.z));
+      for(const st of sts){const from=near(st.t);if(!from.length)continue;
+        // a patrol car already on the street answers police calls from where it is
+        let c=null,rt=null,dd=null;if(svc==='police'){const pc=free.filter(q=>q.shown&&q.a&&q.a.road&&q.pos).sort((a,b)=>Math.hypot(a.pos.x-cx,a.pos.z-cz)-Math.hypot(b.pos.x-cx,b.pos.z-cz))[0];
+          if(pc)for(const d of Dn){rt=route(pc.a,d,30000);if(rt){c=pc;dd=d;break;}}}
+        if(!c){c=free.find(q=>!q.shown)||free[0];for(const s0 of from){for(const d of Dn){rt=route(s0,d,30000);if(rt){dd=d;break;}}if(rt){c.a=s0;c.prev=s0;c.p=.5;c.cur=0;c.offC=null;c._cnJ=null;c.x2J=null;c.x2=null;c.lane=0;c.everShown=true;break;}}}
+        if(!rt)continue;
+        c.route=rt.length>1?rt:null;c.ri=0;c.b=rt.length>1?rt[1]:(roadNeighbors(c.a)[0]||c.a);c.done=false;c.emerg='go';c.emDest=dd;c.home=from[0];c.siren=!!SV[svc].siren;
+        const j={svc,c,st,t,dest:dd,arr:false,at:0,dur:o.dur||14,fire:o.fire||null,role:o.role||'call',crew:null,fx:null};c.job=j;st.out++;jobs.push(j);sirT=0;return j;}
+      return null;}
+    function finish(j){const i=jobs.indexOf(j);if(i>=0)jobs.splice(i,1);j.st.out=Math.max(0,j.st.out-1);clearFx(j);const c=j.c;c.job=null;
+      if(!c.a){c.emerg=null;return;}const r=route(c.a,c.home,30000);if(r&&r.length>1){c.emerg='back';c.emDest=c.home;c.route=r;c.ri=0;c.done=false;c.siren=j.svc==='health'&&j.role==='call';}else{c.emerg=null;c.emDest=null;c.siren=false;}}
+    function clearFx(j){if(j.crew)for(const m of j.crew)scene.remove(m);j.crew=null;if(j.fx){for(const o of j.fx.objs){scene.remove(o);if(o.isInstancedMesh)o.dispose();}j.fx=null;}}
+    // ---- fires ----
+    function call(f){let n=0;for(let k=0;k<(f.S>1?2:1);k++)if(dispatch('fire',f.t,{fire:f,role:'fire'}))n++;
+      if(!n){f.auto=true;return;}f.truck=true;
+      if(covAt(f.t,'health'))dispatch('health',f.t,{fire:f,role:'standby'});if(covAt(f.t,'police'))dispatch('police',f.t,{fire:f,role:'standby'});
+      heliCall('fire',f.t,{fire:f});if(covAt(f.t,'police')&&Math.random()<.6)heliCall('police',f.t,{fire:f});}
+    function ended(f){for(const j of jobs.slice())if(j.fire===f)finish(j);for(const h of helis.values())if(h.fire===f&&(h.mode==='act'||h.mode==='fly'||h.mode==='up'||h.mode==='spin'))h.mode='ret';}
+    // ---- crews at work ----
+    function door(j){const[cx,cz]=center(j.t),S=j.t.b?Math.max(j.t.b.zone?LX(j.t.b):(j.t.b.size||1),j.t.b.zone?LZ(j.t.b):(j.t.b.size||1)):1,dx=wx(j.dest.x)-cx,dz=wx(j.dest.z)-cz,l=Math.hypot(dx,dz)||1;return[cx+dx/l*(S/2-.04),cz+dz/l*(S/2-.04)];}
+    const place=(m,x,z,y,face,bob)=>{m.position.set(x,y+(bob?Math.abs(Math.sin(bob))*.004:0),z);m.rotation.y=face;m.visible=true;};
+    function work(j,dt,now){const c=j.c;if(!c.pos)return;const fx=Math.sin(c.yaw),fz=Math.cos(c.yaw),rx=fz,rz=-fx,gy=c.pos.y,[cx,cz]=center(j.t);
+      if(!j.crew){j.crew=CREW[j.svc]();if(j.svc==='health'){const st=new THREE.Mesh(gStr,mat(0xf2f2f2)),pt=new THREE.Mesh(gPat,mat(0x4f7fc2));scene.add(st);scene.add(pt);pt.visible=false;j.crew.push(st,pt);}
+        if(j.svc==='death'){const cs=new THREE.Mesh(gCas,mat(0x5d3a24));scene.add(cs);cs.visible=false;j.crew.push(cs);}}
+      const back=[c.pos.x-fx*(c.v.L/2+.04),c.pos.z-fz*(c.v.L/2+.04)];
+      if(j.role==='fire'){fireWork(j,dt,now,c,fx,fz,gy,cx,cz);return;}
+      if(j.role==='standby'){// paramedics wait by the ambulance with the stretcher; an officer directs traffic in front of the patrol car
+        const m=j.crew;if(j.svc==='police'){place(m[0],c.pos.x+fx*(c.v.L/2+.06),c.pos.z+fz*(c.v.L/2+.06),gy,c.yaw+Math.PI+Math.sin(now*2)*.6);return;}
+        place(m[0],back[0]+rx*.035,back[1]+rz*.035,gy,Math.atan2(cx-back[0],cz-back[1]));place(m[1],back[0]-rx*.035,back[1]-rz*.035,gy,Math.atan2(cx-back[0],cz-back[1]));
+        if(m[2]){place(m[2],back[0],back[1],gy,c.yaw);}return;}
+      // a call: walk to the door, go in, come back (with the patient / the casket), load up and leave
+      const D=door(j),u=Math.min(1,j.at/j.dur),face=Math.atan2(D[0]-back[0],D[1]-back[1]),px=-Math.cos(face),pz=Math.sin(face);
+      let k,out=true,carry=false;if(u<.25)k=u/.25;else if(u<.5){k=1;out=false;}else if(u<.8){k=1-(u-.5)/.3;carry=true;}else{k=0;carry=true;out=u<.92;}
+      const x=back[0]+(D[0]-back[0])*k,z=back[1]+(D[1]-back[1])*k,dir=u<.25?face:face+Math.PI,walk=(u<.25||(u>=.5&&u<.8))?now*11:0,m=j.crew;
+      if(j.svc==='police'){if(out)place(m[0],x,z,gy,dir,walk);else m[0].visible=false;return;}
+      for(let i=0;i<2;i++){const sd=(i?-1:1)*.022;if(out)place(m[i],x+px*sd+Math.sin(dir)*(i?-.045:.045)*0,z+pz*sd,gy,dir,walk+i);else m[i].visible=false;}
+      if(j.svc==='health'){const st=m[2],pt=m[3];if(out){place(st,x,z,gy,dir);st.visible=true;}else st.visible=false;pt.visible=out&&carry;if(pt.visible)place(pt,x,z,gy,dir);}
+      if(j.svc==='death'){const cs=m[2];cs.visible=out&&carry;if(cs.visible)place(cs,x,z,gy,dir);}}
+    function fireWork(j,dt,now,c,fx,fz,gy,cx,cz){const f=j.fire;if(!f||!f.t.b)return;
+      if(!j.fx){const drops=new THREE.InstancedMesh(dropG,dropM,150);drops.frustumCulled=false;scene.add(drops);const mist=[];for(let i=0;i<6;i++){const m=new THREE.Mesh(puffG,mistM);scene.add(m);mist.push(m);}
+        const hose=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(),new THREE.Vector3(),new THREE.Vector3()]),new THREE.LineBasicMaterial({color:0xc62828}));hose.frustumCulled=false;scene.add(hose);j.fx={drops,mist,hose,objs:[drops,...mist,hose]};}
+      const ty=Math.min(f.h*.8,f.h-.02)+.02,tx=cx-c.pos.x,tz=cz-c.pos.z,dd=Math.hypot(tx,tz)||1,ux=tx/dd,uz=tz/dd,m1=j.crew[0],m2=j.crew[1];
+      const mpx=c.pos.x+ux*Math.min(.3,dd*.4)-fx*c.v.L*.25,mpz=c.pos.z+uz*Math.min(.3,dd*.4)-fz*c.v.L*.25;place(m1,mpx,mpz,gy,Math.atan2(cx-mpx,cz-mpz));
+      const m2x=c.pos.x-fx*c.v.L*.55+ux*.06,m2z=c.pos.z-fz*c.v.L*.55+uz*.06;place(m2,m2x,m2z,gy,Math.atan2(mpx-m2x,mpz-m2z)+Math.sin(now*1.3)*.4);
+      const P=j.fx.hose.geometry.attributes.position;P.setXYZ(0,c.pos.x-fx*c.v.L*.4,gy+.03,c.pos.z-fz*c.v.L*.4);P.setXYZ(1,(mpx+m2x)/2,gy+.003,(mpz+m2z)/2);P.setXYZ(2,mpx+Math.sin(m1.rotation.y)*.02,gy+.056,mpz+Math.cos(m1.rotation.y)*.02);P.needsUpdate=true;
+      const nz=[c.pos.x+fx*c.v.L*.1,c.pos.y+c.v.ly/.42+.02,c.pos.z+fz*c.v.L*.1],hz=[mpx+Math.sin(m1.rotation.y)*.03,gy+.058,mpz+Math.cos(m1.rotation.y)*.03];let n=0;
+      for(const[src,cnt,arc,spd]of[[nz,90,.3+dd*.2,1.1],[hz,60,.12+dd*.12,1.5]])for(let i=0;i<cnt;i++,n++){const t=(now*spd+i/cnt+i*.618)%1,q=i*12.9898,ex=cx+Math.sin(q)*.06*t*f.S,ez=cz+Math.cos(q*1.7)*.06*t*f.S,ey=ty+Math.sin(q*2.3)*.04*t,mx=(src[0]+ex)/2,mz=(src[2]+ez)/2,my=Math.max(src[1],ey)+arc;
+        _p.set((1-t)*(1-t)*src[0]+2*(1-t)*t*mx+t*t*ex,(1-t)*(1-t)*src[1]+2*(1-t)*t*my+t*t*ey,(1-t)*(1-t)*src[2]+2*(1-t)*t*mz+t*t*ez);_s.setScalar(.6+t*1.8);_m.compose(_p,_q,_s);j.fx.drops.setMatrixAt(n,_m);}
+      j.fx.drops.count=n;j.fx.drops.instanceMatrix.needsUpdate=true;
+      j.fx.mist.forEach((m,i)=>{const p=(now*.5+i/6)%1;m.position.set(cx+Math.sin(i*2.1)*.12*f.S,ty+p*.35,cz+Math.cos(i*1.3)*.12*f.S);m.scale.setScalar((.4+p*1.4)*f.S);m.visible=f.k>0;});
       f.k-=dt/14;}
-    return{call,ended,update,get busy(){return !!cur;}};})();
+    // ---- helicopters ----
+    const helis=new Map(),PADL={fire:[-.08,FLOOR*2+.024,-.12],police:[-.12,FLOOR*2+.022,-.18],hospital:[-.3,FLOOR*6+.026,-.4]},HSVC={fire:'fire',police:'police',hospital:'health'};
+    const HCOL={fire:[0xc62828,0xf2f2f2],police:[0x1f3a5f,0xf2f2f2],hospital:[0xf2f2f2,0xd32f2f]};
+    function mkHeli(kind){const[c1,c2]=HCOL[kind],g=new THREE.Group(),M=c=>new THREE.MeshStandardMaterial({color:c,roughness:.45,metalness:.25}),add=(geo,mt,x=0,y=0,z=0)=>{const m=new THREE.Mesh(geo,mt);m.position.set(x,y,z);m.castShadow=true;g.add(m);return m;};
+      add(new THREE.SphereGeometry(.05,14,10).scale(1,.85,1.9),M(c1),0,.07,0);add(new THREE.SphereGeometry(.043,12,8,0,6.3,0,1.3).scale(1,.85,1.2).rotateX(1.25),new THREE.MeshStandardMaterial({color:0x1d2f40,roughness:.1,metalness:.6}),0,.075,.045);
+      add(new THREE.BoxGeometry(.101,.012,.16),M(c2),0,.058,-.005);add(new THREE.CylinderGeometry(.009,.018,.22,8).rotateX(Math.PI/2),M(c1),0,.085,-.19);add(new THREE.BoxGeometry(.004,.06,.04),M(c1),0,.105,-.29);add(new THREE.BoxGeometry(.05,.004,.02),M(c1),0,.09,-.27);
+      for(const sx of[-1,1]){add(new THREE.BoxGeometry(.006,.006,.2),M(0x2b2f36),sx*.04,.006,0);for(const sz of[-.05,.05])add(new THREE.BoxGeometry(.004,.03,.004).rotateZ(sx*.4),M(0x2b2f36),sx*.033,.02,sz);}
+      add(new THREE.CylinderGeometry(.012,.012,.02,8),M(0x2b2f36),0,.118,0);
+      const rot=new THREE.Group();rot.position.set(0,.13,0);const bm=new THREE.MeshStandardMaterial({color:0x22262b,roughness:.6});for(let i=0;i<4;i++){const bl=new THREE.Mesh(new THREE.BoxGeometry(.2,.003,.016).translate(.1,0,0),bm);bl.rotation.y=i*Math.PI/2;rot.add(bl);}g.add(rot);
+      const disc=new THREE.Mesh(new THREE.CircleGeometry(.2,24).rotateX(-Math.PI/2),new THREE.MeshBasicMaterial({color:0x222222,transparent:true,opacity:0,depthWrite:false}));disc.position.y=.131;g.add(disc);
+      const tr=new THREE.Group();tr.position.set(.006,.105,-.29);tr.add(new THREE.Mesh(new THREE.BoxGeometry(.003,.06,.008),bm));g.add(tr);
+      const bea=mkGlow(0xff2020,.08),nl=mkGlow(0xff2020,.05),nr=mkGlow(0x20ff40,.05);
+      let extra=null;if(kind==='police'){extra=new THREE.Mesh(new THREE.ConeGeometry(.28,1,18,1,true).translate(0,-.5,0),new THREE.MeshBasicMaterial({color:0xfff3c0,transparent:true,opacity:.16,depthWrite:false,blending:THREE.AdditiveBlending,side:THREE.DoubleSide}));extra.visible=false;g.add(extra);}
+      if(kind==='fire'){extra=new THREE.Group();const cab=new THREE.Mesh(new THREE.CylinderGeometry(.0015,.0015,.26,3).translate(0,-.13,0),M(0x333333));const bk=new THREE.Mesh(new THREE.CylinderGeometry(.03,.022,.04,10).translate(0,-.28,0),M(0xd84315));extra.add(cab);extra.add(bk);extra.position.y=.04;extra.visible=false;g.add(extra);}
+      g.scale.setScalar(1.15);scene.add(g);return{g,rot,tr,disc,bea,nl,nr,extra};}
+    const hdrops=new THREE.InstancedMesh(dropG,dropM,240);hdrops.frustumCulled=false;hdrops.count=0;scene.add(hdrops);
+    function padOf(t){const b=t.b,kind=b.kind,L=PADL[kind],r=b.rot||0,cx=wx(t.x)+(LX(b)-1)/2,cz=wx(t.z)+(LZ(b)-1)/2,c=Math.cos(r),sn=Math.sin(r);return{x:cx+L[0]*c+L[2]*sn,y:L[1],z:cz-L[0]*sn+L[2]*c,yaw:r};}
+    function syncHelis(){const want=new Set();for(const q of ST){const b=q.t.b;if(!b||!PADL[b.kind]||Math.min(3,b.lv||1)<3)continue;const k=key(q.t);want.add(k);
+        if(!helis.has(k)){const o=mkHeli(b.kind),p=padOf(q.t);helis.set(k,Object.assign(o,{st:q.t,kind:b.kind,svc:HSVC[b.kind],mode:'pad',pos:new THREE.Vector3(p.x,p.y,p.z),yaw:p.yaw,spin:0,vel:0,bank:0,t:0,tgt:null}));}}
+      for(const[k,h]of helis)if(!want.has(k)){scene.remove(h.g);for(const s2 of[h.bea,h.nl,h.nr])scene.remove(s2);helis.delete(k);}}
+    function heliCall(svc,t,o={}){if(!t||!t.b)return false;const[cx,cz]=center(t);let best=null,bd=1e9;for(const h of helis.values()){if(h.svc!==svc||h.mode!=='pad')continue;const d=Math.hypot(h.pos.x-cx,h.pos.z-cz);if(d<bd){bd=d;best=h;}}
+      if(!best)return false;best.tgt=t;best.fire=o.fire||null;best.dest=o.dest||null;best.mode='spin';best.t=0;best.wait=o.wait||14;return true;}
+    function heliUpdate(dt,rdt,now){let nd=0;const night=NIGHT_I>.35;
+      for(const h of helis.values()){const p=padOf(h.st),tg=h.tgt&&h.tgt.b?h.tgt:null;let[tx,tz]=tg?center(tg):[p.x,p.z],ty=1.5,want=null,sp=1.7;
+        if(h.mode!=='pad'&&h.mode!=='cool'&&h.mode!=='ret'&&h.mode!=='down'&&!tg)h.mode='ret';
+        h.t+=dt;const S=h.mode;
+        if(S==='pad'){h.spin=Math.max(0,h.spin-rdt*.5);h.pos.set(p.x,p.y,p.z);h.yaw=p.yaw;}
+        else if(S==='spin'){h.spin=Math.min(1,h.spin+dt*.45);if(h.spin>=1){h.mode='up';h.t=0;}}
+        else if(S==='up'){h.pos.y+=dt*.45;if(h.pos.y>p.y+.35){h.mode='fly';h.t=0;}}
+        else if(S==='fly'||S==='ret'){const home=S==='ret';let ax=home?p.x:tx,az=home?p.z:tz;
+          if(!home&&h.svc==='police'){const a=now*.35;ax=tx+Math.cos(a)*.9;az=tz+Math.sin(a)*.9;}
+          if(!home&&h.svc==='health'&&h.dest){ax=wx(h.dest.x);az=wx(h.dest.z);}
+          const dx=ax-h.pos.x,dz=az-h.pos.z,d=Math.hypot(dx,dz);want=Math.atan2(dx,dz);
+          const cy=home&&d<.6?p.y+.35:(!home&&h.svc==='fire'&&tg?Math.max(1.1,(h.fire?h.fire.h:0)+.6):1.5);h.pos.y+=clamp(cy-h.pos.y,-dt*.5,dt*.5);
+          const v=Math.min(sp,d*1.2);h.vel=v;if(d>.02){h.pos.x+=dx/d*Math.min(d,v*dt);h.pos.z+=dz/d*Math.min(d,v*dt);}
+          if(d<.08){if(home){h.mode='down';h.t=0;}else{h.mode='act';h.t=0;}}}
+        else if(S==='act'){h.vel=0;
+          if(h.svc==='fire'){const f=h.fire;if(!f||f.k<=0||fires.indexOf(f)<0){h.mode='ret';}else{h.pos.x+=(tx-h.pos.x)*Math.min(1,dt*2);h.pos.z+=(tz-h.pos.z)*Math.min(1,dt*2);h.pos.y+=((f.h+.55)-h.pos.y)*Math.min(1,dt);f.k-=dt/(f.truck&&jobs.some(j=>j.fire===f&&j.role==='fire'&&j.arr)?14:45);
+              for(let i=0;i<60&&nd<240;i++,nd++){const u=(now*1.6+i/60+i*.37)%1,q=i*7.31;_p.set(h.pos.x+Math.sin(q)*.04*(1+u*2),h.pos.y-.3-u*(h.pos.y-.3-f.h),h.pos.z+Math.cos(q*1.3)*.04*(1+u*2));_s.setScalar(.8+u);_m.compose(_p,_q,_s);hdrops.setMatrixAt(nd,_m);}}}
+          else if(h.svc==='police'){const a=now*.35,ax=tx+Math.cos(a)*.9,az=tz+Math.sin(a)*.9;want=Math.atan2(ax-h.pos.x,az-h.pos.z);h.pos.x+=(ax-h.pos.x)*Math.min(1,dt*1.5);h.pos.z+=(az-h.pos.z)*Math.min(1,dt*1.5);h.pos.y+=(1.25-h.pos.y)*Math.min(1,dt);h.vel=.5;
+            if((h.fire?(fires.indexOf(h.fire)<0):h.t>h.wait+6))h.mode='ret';}
+          else{// air ambulance: land next to the scene, wait, take off
+            const gy=.012;if(h.t<3){h.pos.y+=(gy-h.pos.y)*Math.min(1,dt*.9);}else if(h.t<3+h.wait){h.pos.y=gy;h.spin=Math.max(.35,h.spin-dt*.3);}else{h.spin=Math.min(1,h.spin+dt*.6);if(h.spin>=1)h.mode='ret2';}}}
+        else if(S==='ret2'){h.pos.y+=dt*.45;if(h.pos.y>.6)h.mode='ret';}
+        else if(S==='down'){h.pos.x+=(p.x-h.pos.x)*Math.min(1,dt*2);h.pos.z+=(p.z-h.pos.z)*Math.min(1,dt*2);want=p.yaw;h.pos.y=Math.max(p.y,h.pos.y-dt*.25);if(h.pos.y<=p.y+.001){h.mode='cool';h.t=0;h.tgt=null;h.fire=null;}}
+        else if(S==='cool'){h.spin=Math.max(0,h.spin-dt*.35);h.pos.set(p.x,p.y,p.z);if(h.spin<=0)h.mode='pad';}
+        if(want!=null){let dy=want-h.yaw;while(dy>Math.PI)dy-=2*Math.PI;while(dy<-Math.PI)dy+=2*Math.PI;const turn=clamp(dy,-dt*1.6,dt*1.6);h.yaw+=turn;h.bank+=((-turn/Math.max(dt,1e-3))*.18-h.bank)*Math.min(1,dt*3);}else h.bank*=.9;
+        h.g.position.copy(h.pos);h.g.rotation.set(Math.min(.22,h.vel*.12),h.yaw,clamp(h.bank,-.35,.35),'YXZ');
+        h.rot.rotation.y+=rdt*h.spin*34;h.tr.rotation.x+=rdt*h.spin*50;h.disc.material.opacity=h.spin*.28;
+        const fly=h.mode!=='pad';h.bea.visible=fly&&Math.floor(now*1.6)%2===0;h.bea.position.set(h.pos.x,h.pos.y+.07,h.pos.z);
+        const sx=Math.cos(h.yaw)*.07,sz=-Math.sin(h.yaw)*.07;h.nl.visible=h.nr.visible=fly||night;h.nl.position.set(h.pos.x-sx,h.pos.y+.06,h.pos.z-sz);h.nr.position.set(h.pos.x+sx,h.pos.y+.06,h.pos.z+sz);
+        if(h.extra)h.extra.visible=h.kind==='police'?(h.mode==='act'&&night):(h.mode==='act'||h.mode==='fly')&&!!h.fire;}
+      hdrops.count=nd;hdrops.instanceMatrix.needsUpdate=true;}
+    // ---- random calls ----
+    function calls(dt){if(!G||(stats.pop||0)<60)return;const pf=clamp(900/((stats.pop||0)+300),.35,2.4);
+      for(const svc of['police','health','death']){callT[svc]-=dt;if(callT[svc]>0)continue;callT[svc]=({police:34,health:42,death:60})[svc]*pf*rnd(.6,1.4);
+        if(!ST.some(q=>q.svc===svc&&q.out<q.cap))continue;const cand=[];for(let i=0;i<40;i++){const t=G.tiles[Math.floor(Math.random()*G.tiles.length)];if(t&&t.b&&t.b.zone&&t.ref==null&&(svc==='police'||t.b.zone==='R')&&covAt(t,svc)){cand.push(t);if(cand.length>2)break;}}
+        if(!cand.length)continue;const t=cand[0],j=dispatch(svc,t,{role:'call',dur:svc==='death'?20:svc==='health'?18:14});
+        if(j){const[cx,cz]=center(t);if(svc==='health'&&(Math.random()<.35)){heliCall('health',t,{dest:j.dest,wait:10});}if(svc==='police'&&Math.random()<.3)heliCall('police',t,{wait:16});}}}
+    function update(dt,now,rdt){stT-=rdt;if(stT<=0&&G)stations();calls(dt);
+      for(const j of jobs.slice()){const c=j.c;if(c.job!==j||(!c.emerg)){finish(j);continue;}if(c.emerg==='work'){j.arr=true;j.at+=dt;work(j,dt,now);}
+        if(j.fire?fires.indexOf(j.fire)<0:(j.arr&&j.at>j.dur))finish(j);}
+      lights(now);heliUpdate(dt,rdt,now);
+      sirT-=dt;if(sirT<=0){const c=cars.find(q=>q.emerg&&q.siren&&q.shown&&q.a&&(q.emerg==='go'||q.emerg==='back')&&tileSeen(q.a));if(c&&cam.dist<26){Snd.play(c.v.id==='police'?'yelp':'siren');sirT=.86;}else sirT=.3;}}
+    return{call,ended,update:(dt,now)=>update(dt,now,1/60),upd:update,get jobs(){return jobs},get helis(){return helis},get ST(){return ST},dispatch,heliCall,stations};})();
   function ignite(t){if(!t||!t.b||fires.some(f=>f.t===t)||t.b.kind==='fire')return;const[cx,cz,S]=center(t),h=hgt(t.b),g=new THREE.Group();g.position.set(cx,0,cz);
     const fl=[],rf=Math.min(.42,S*.42);for(let i=0;i<12;i++){const m=new THREE.Mesh(coneG,i%2?flameMat2:flameMat);if(i<6)m.position.set((Math.random()-.5)*S*.5,h,(Math.random()-.5)*S*.5);else{const side=i%4,a=(Math.random()-.5)*S*.6,y=h*(.15+Math.random()*.8);m.position.set(side===0?rf:side===1?-rf:a,y,side===2?rf:side===3?-rf:a);}g.add(m);fl.push(m);}
     const sm=[];for(let i=0;i<9;i++){const m=new THREE.Mesh(puffG,smokeMat);m.userData.ph=Math.random();g.add(m);sm.push(m);}
@@ -4776,7 +4938,7 @@ const Disaster=(()=>{
         scene.remove(f.g);fires.splice(i,1);FR.ended(f);continue;}
       // no fire cover: sometimes it jumps to a neighbour
       if(!f.ext&&Math.random()<dt*.025){const[cx,cz]=center(f.t);const c=G.tiles.filter(t=>t.b&&t!==f.t&&!PARKS[t.b.kind]&&Math.hypot(wx(t.x)-cx,wx(t.z)-cz)<2.2);if(c.length)ignite(c[Math.floor(Math.random()*c.length)]);}}
-    FR.update(dt,now);
+    FR.upd(dt,now,rdt);
     for(let i=floods.length-1;i>=0;i--){const f=floods[i];f.age+=dt;const T=40,y=f.age<8?f.age/8*.06:f.age>T-10?Math.max(0,(T-f.age)/10*.06):.06;f.m.position.y=y+.004;f.m.visible=y>.002;if(f.age>T){scene.remove(f.m);f.m.geometry.dispose();floods.splice(i,1);}}
     for(let i=ruins.length-1;i>=0;i--){const r=ruins[i];r.life-=dt;if(r.life<5)r.m.scale.y=Math.max(.01,r.life/5);if(r.life<=0){scene.remove(r.m);r.m.geometry.dispose();ruins.splice(i,1);}}
     if(tornado){const o=tornado;o.t+=dt;const f=o.t/o.dur,x=o.p0[0]+(o.p1[0]-o.p0[0])*f+Math.sin(o.t*.7)*.6,z=o.p0[1]+(o.p1[1]-o.p0[1])*f+Math.cos(o.t*.5)*.6;o.g.position.set(x,0,z);
@@ -4786,7 +4948,7 @@ const Disaster=(()=>{
       const t=T(Math.round(x+N/2-.5),Math.round(z+N/2-.5));
       if(t&&!o.hit.has(t)){o.hit.add(t);const r=t.ref!=null?G.tiles[t.ref]:t;if(r&&r.b&&!PARKS[r.b.kind]&&Math.random()<.55)destroy(r,'tornado');if(t.tree){t.tree=false;setTree(t);}}
       if(o.t>=o.dur){scene.remove(o.g);tornado=null;window.SHAKE=quake>0?window.SHAKE:0;Radio.flash('The tornado has passed. Crews are clearing the damage.');}}}
-  return{day,update,start,ignite,get fires(){return fires},get mode(){return mode},set mode(m){mode=m;try{localStorage.setItem('metrob_dis2',m);}catch(e){}},get active(){return fires.length+floods.length+(tornado?1:0)+(quake>0?1:0);}};
+  return{day,update,start,ignite,ems:FR,get fires(){return fires},get mode(){return mode},set mode(m){mode=m;try{localStorage.setItem('metrob_dis2',m);}catch(e){}},get active(){return fires.length+floods.length+(tornado?1:0)+(quake>0?1:0);}};
 })();
 
 const grid=new THREE.GridHelper(N,N,0xffffff,0xffffff);grid.material.transparent=true;grid.material.opacity=.12;grid.position.y=.02;scene.add(grid);
@@ -4816,6 +4978,7 @@ const Snd=(()=>{
     chime:()=>{tone(784,'sine',.25,.09);tone(1175,'sine',.35,.06,null,.08);},
     horn:()=>{tone(392,'square',.18,.025);tone(494,'square',.18,.02);},
     siren:()=>{tone(640,'sawtooth',.42,.016,null,0,960);tone(960,'sawtooth',.42,.016,null,.43,640);},
+    yelp:()=>{for(let i=0;i<4;i++)tone(700,'square',.2,.011,null,i*.21,1300);},
   };
   function play(n){if(!started)return;fx[n]&&fx[n]();}
   // background music: slow generative pad
@@ -4971,7 +5134,7 @@ function renderPop(){const el=$('stpop'),br=stats.br||{upBy:{},cv:{}},h=G.hist||
     <h5>Population history</h5>${spark(h.p,'#7ee081',v=>Math.round(v).toLocaleString())}`;}
   else if(popK==='hap'){const c=br.cv||{};
     html=`<h4>Happiness</h4><div class="pbig">${stats.pop?stats.hap+'%':'–'}<small>${stats.hap>=70?'Citizens love it here':stats.hap>=50?'Mostly content':stats.pop?'Unhappy, check the gaps below':'No residents yet'}</small></div>
-    <h5>Homes with service</h5>${bar('Power',c.power||0,'#ffd23f')}${bar('Water',c.water||0,'#4fb3ff')}${bar('Police',c.police||0,'#5c7cbf')}${bar('Fire',c.fire||0,'#ff7043')}${bar('Health',c.health||0,'#ef5350')}${bar('Education',c.edu||0,'#ab47bc')}${bar('Parks',c.park||0,'#66bb6a')}${bar('Transit',c.transit||0,'#26c6da')}${bar('Polluted',c.poll||0,'#8d6e63')}
+    <h5>Homes with service</h5>${bar('Power',c.power||0,'#ffd23f')}${bar('Water',c.water||0,'#4fb3ff')}${bar('Police',c.police||0,'#5c7cbf')}${bar('Fire',c.fire||0,'#ff7043')}${bar('Health',c.health||0,'#ef5350')}${bar('Deathcare',c.death||0,'#9575cd')}${bar('Education',c.edu||0,'#ab47bc')}${bar('Parks',c.park||0,'#66bb6a')}${bar('Transit',c.transit||0,'#26c6da')}${bar('Polluted',c.poll||0,'#8d6e63')}
     <h5>Happiness history</h5>${spark(h.h,'#ff8a65',v=>Math.round(v)+'%')}<small class="phint">Taxes above 10% lower happiness (now ${G.tax}%)</small>`;}
   el.innerHTML=html;}
 function showPop(k,anchor,pin){popK=k;popPin=!!pin;renderPop();const el=$('stpop'),r=anchor.getBoundingClientRect();el.classList.add('show');
@@ -5335,7 +5498,7 @@ function loop(now){requestAnimationFrame(loop);
   skyU.sunCol.value.setRGB(1,.6+.3*dayF,.35+.5*dayF);sun.color.setRGB(1,.82+.16*dayF,.66+.3*dayF);hemi.color.setRGB(.62+.25*dayF,.72+.22*dayF,.95);
   waterNorm.offset.x=(now*.00002)%1;waterNorm.offset.y=(now*.000013)%1;
   scene.fog.near=Math.max(50,cam.dist*1.25)*(1-wetF*.45);scene.fog.far=Math.max(130,cam.dist*3)*(1-wetF*.35);{const cf=scene.fog.far+40,cn=clamp(cam.dist*.04,.05,4);if(Math.abs(camera.far-cf)>5||Math.abs(camera.near-cn)>cn*.2){camera.far=cf;camera.near=cn;camera.updateProjectionMatrix();}}{const hs=clamp(cam.dist*1.3,7,32);if(Math.abs(sun.shadow.camera.right-hs)>.5){Object.assign(sun.shadow.camera,{left:-hs,right:hs,top:hs,bottom:-hs});sun.shadow.camera.updateProjectionMatrix();}}
-  const nightI=clamp(1-dayF*1.4,0,1)*1.3;for(const m of winMats)m.emissiveIntensity=nightI;updateLights(dt,dayF,.12+dayF*.9);
+  const nightI=clamp(1-dayF*1.4,0,1)*1.3;NIGHT_I=nightI;for(const m of winMats)m.emissiveIntensity=nightI;updateLights(dt,dayF,.12+dayF*.9);
   for(const r of rotors)if(r.parent&&r.parent.parent)r.rotation.z-=dt*r.userData.sp;
   keyCam(dt);cam.yaw+=(cam.yawT-cam.yaw)*(1-Math.exp(-dt*4.5));Snd.update(dt,{dist:cam.dist,cars:G?Math.min(CARS,Math.floor(10+stats.pop/22)):12,day:dayF});
   if(treeDirty)rebuildTrees();flushChunks(G?2:8);applyCam();renderFrame(1-dayFnow);
