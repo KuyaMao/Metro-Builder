@@ -560,9 +560,9 @@ function key(t){return t.z*N+t.x;}
 const linked=(t,n)=>(!t._cvl||t._cvl.includes(n)||(t._cvT&&t._cvT.has(n)))&&(!n._cvl||n._cvl.includes(t)||(n._cvT&&n._cvT.has(t)));
 // side roads that run into a curve join it (a "tap"): the curve tile links to that road and the road's asphalt runs on to the curve's centre line
 let _tapL=[];
-function refreshTaps(){const old=new Set(_tapL.filter(t=>t._tap));for(const t of _tapL){t._cvT=null;t._tap=null;}_tapL=[];if(!G||!G.curves)return;
+function refreshTaps(){_ndGen++;const old=new Set(_tapL.filter(t=>t._tap));for(const t of _tapL){t._cvT=null;t._tap=null;}_tapL=[];if(!G||!G.curves)return;
   for(const id in G.curves){const c=G.curves[id];if(!c.S)continue;for(const k of c.core){const C=G.tiles[k];if(!C||!C._cvl)continue;
-    for(const[dx,dz]of[[0,-1],[1,0],[0,1],[-1,0]]){const n=T(C.x+dx,C.z+dz);if(!n||!n.road||n.cv||n.cvo||C._cvl.includes(n)||n.water)continue;
+    for(const[dx,dz]of[[0,-1],[1,0],[0,1],[-1,0]]){const n=T(C.x+dx,C.z+dz);if(!n||!n.road||n.cv||n.cvo||C._cvl.includes(n)||n.water||key(n)===c.A||key(n)===c.B)continue;
       const o=T(n.x+dx,n.z+dz);let others=0;for(const[ex,ez]of[[0,-1],[1,0],[0,1],[-1,0]]){if(ex===-dx&&ez===-dz)continue;const q=T(n.x+ex,n.z+ez);if(q&&q.road&&!q.cv)others++;}
       if(!((o&&o.road&&!o.cv)||others===0))continue;
       // where the side road's axis meets the curve's centre line, inside this curve tile's stretch
@@ -956,6 +956,7 @@ const DASH=[[-.45,-.33],[-.2,-.08],[.05,.17],[.3,.42]];
 function roadParts(t,out){
   if(t.cv){t._ramp=null;const c=G.curves&&G.curves[t.cv];if(c&&t.cvi===0)curveParts(c,out);return;}
   if(t.ix==='ichg'&&t._mOv==null){const I=ichgInfo(t);if(I){t._ramp=null;ichgParts(t,I,out);return;}}
+  {const NA=nodeArms(t);if(NA){t._ramp=null;nodeParts(t,NA,out);return;}}
   const X=wx(t.x),Z=wx(t.z),y=t.water?.142:.012,m=roadMask(t),{r,hw,bk,C,sw,sws}=roadGeo(t);
   const P=(g,c)=>out.road.push([g,c]);
   if(t._tap)for(const tp of t._tap){const q=curveAt(tp.c,tp.s),ux=-tp.dx,uz=-tp.dz,ex=X+ux*.5,ez=Z+uz*.5,L0=Math.max(0,(q.x-ex)*ux+(q.z-ez)*uz),cw=C,fx=L0>.01?tapFillets(t,tp,X,Z,{r,bk,C,sw,hw,sws},P):null,L=fx!=null?Math.min(L0,fx+.03):L0;
@@ -1083,6 +1084,64 @@ function tapFillets(t,tp,X,Z,g,P){if(g.hw||g.sws==='n')return null;const c=tp.c,
   if(cg.bk&&xs[-1]!=null&&xs[1]!=null){const s0=Math.min(xs[-1],xs[1]),s1=Math.max(xs[-1],xs[1]);for(let a=s0;a<s1;a+=.07){const b=Math.min(s1,a+.04),N=3,L0=[],L1=[];
     for(let i=0;i<=N;i++){const sv=a+(b-a)*i/N,q=curveAt(c,sv),nx=-q.tz*side,nz=q.tx*side;L0.push([q.x+nx*cg.r.cw,q.z+nz*cg.r.cw]);L1.push([q.x+nx*cg.C,q.z+nz*cg.C]);}P(bandGeo(L0,L1,.0193),RCOL.bike);}}
   return xs[-1]!=null&&xs[1]!=null?sMax:null;}
+
+/* ---------- vector nodes: a road tile where a curve ends at a free angle ----------
+   Each linked neighbour is an arm with an outward direction u (a curve arm points where the curve actually starts), a half-width
+   C and sidewalk/bike widths. The junction is built from the arms: kerb lines meet at each corner and are rounded off, the asphalt
+   fills the loop of corners, sidewalks, kerbs and bike lanes follow it, and cars drive a Bezier from the entry arm to the exit arm. */
+let _ndGen=0;const _ndC=new Map();
+const rgt=u=>[-u[1],u[0]];
+function armsOf(t){const cx=wx(t.x),cz=wx(t.z),A=[];
+  for(const[dx,dz]of[[0,-1],[1,0],[0,1],[-1,0]]){const n=T(t.x+dx,t.z+dz);if(!n||!n.road||!linked(t,n))continue;let u=[dx,dz],g=roadGeo(n),pt=[cx+dx*.5,cz+dz*.5],c=null;
+    if(n.cv&&n._cvl&&(n._cvl[0]===t||n._cvl[1]===t)&&G.curves[n.cv]&&G.curves[n.cv].S){c=G.curves[n.cv];const st=c.A===key(t),q=curveAt(c,st?0:c.S.len),l=Math.hypot(q.x-cx,q.z-cz)||1;u=[(q.x-cx)/l,(q.z-cz)/l];pt=[q.x,q.z];g=CURVE_G(c);}
+    A.push({n,u,g,pt,c,ang:Math.atan2(u[1],u[0])});}
+  return A.sort((a,b)=>a.ang-b.ang);}
+function nodeArms(t){if(!t||!t.road||t.cv||t.water||t._tap||t.ix==='ichg'||!G.curves)return null;const k=key(t),m=roadMask(t),e=_ndC.get(k);if(e&&e.m===m&&e.g===_ndGen)return e.a;
+  const A=armsOf(t),free=A.some(a=>Math.abs(a.u[0])<.999&&Math.abs(a.u[1])<.999),r=free&&A.length?A:null;_ndC.set(k,{m,g:_ndGen,a:r});return r;}
+// smallest angle two arms may meet at so their kerbs meet inside the tile
+const armGap=(C1,C2)=>2*Math.atan(Math.max(C1,C2)/.4);
+function nodeCorners(t,A){const cx=wx(t.x),cz=wx(t.z),n=A.length,out=[];
+  for(let i=0;i<n;i++){const a=A[i],b=A[(i+1)%n];let d=n===1?2*Math.PI:b.ang-a.ang;if(d<=0)d+=2*Math.PI;
+    const ra=rgt(a.u),rb=rgt(b.u),Ca=a.g.C,Cb=b.g.C,K=(arm,sg,C,s)=>{const r=rgt(arm.u);return[cx+arm.u[0]*s+r[0]*sg*C,cz+arm.u[1]*s+r[1]*sg*C];};
+    const Ea=Math.max(.5,Math.hypot(a.pt[0]-cx,a.pt[1]-cz)),Eb=Math.max(.5,Math.hypot(b.pt[0]-cx,b.pt[1]-cz));let P=[],fil=false,sA=0,sB=0;
+    if(d<Math.PI*.985){// kerb lines a(+side) and b(-side) meet at X: s_a = (Cb + Ca cos d)/sin d
+      const sn=Math.sin(d),cs=Math.cos(d),sx=(Cb+Ca*cs)/sn,sy=(Ca+Cb*cs)/sn,Xp=K(a,1,Ca,sx),Rf=clamp(Math.min(Ea,Eb)-.03-Math.max(sx,sy),.015,.24);sA=sx+Rf;sB=sy+Rf;
+      const P0=K(a,1,Ca,sA),P2=K(b,-1,Cb,sB);P.push(K(a,1,Ca,Ea));for(let k=0;k<=12;k++){const v=k/12,w0=(1-v)*(1-v),w1=2*(1-v)*v,w2=v*v;P.push([w0*P0[0]+w1*Xp[0]+w2*P2[0],w0*P0[1]+w1*Xp[1]+w2*P2[1]]);}P.push(K(b,-1,Cb,Eb));fil=true;}
+    else{// back of a T or the outside of a bend: round the kerb about the node centre
+      P.push(K(a,1,Ca,Ea),K(a,1,Ca,0));const a0=a.ang+Math.PI/2,a1=a0+d-Math.PI;for(let k=1;k<12;k++){const v=k/12,an=a0+(a1-a0)*v,C=Ca+(Cb-Ca)*v;P.push([cx+Math.cos(an)*C,cz+Math.sin(an)*C]);}P.push(K(b,-1,Cb,0),K(b,-1,Cb,Eb));}
+    P=P.filter((p,i)=>!i||Math.hypot(p[0]-P[i-1][0],p[1]-P[i-1][1])>1e-4);out.push({a,b,P,fil,sA,sB,d});}
+  return out;}
+function polyOff(P,o,cx,cz){const n=P.length,N=[];for(let i=0;i<n;i++){const p0=P[Math.max(0,i-1)],p1=P[Math.min(n-1,i+1)],tx=p1[0]-p0[0],tz=p1[1]-p0[1],l=Math.hypot(tx,tz)||1;N.push([-tz/l,tx/l]);}
+  let sd=0;for(let i=0;i<n;i++)sd+=N[i][0]*(P[i][0]-cx)+N[i][1]*(P[i][1]-cz);const hs=Math.sign(sd)||1;return P.map((p,i)=>{const oo=typeof o==='function'?o(i/(n-1)):o;return[p[0]+N[i][0]*hs*oo,p[1]+N[i][1]*hs*oo];});}
+function nodeParts(t,A,out){const cx=wx(t.x),cz=wx(t.z),y=.012,P=(g,c)=>out.road.push([g,c]),cor=nodeCorners(t,A),asp=asp0(t),hwAll=A.every(a=>a.g.hw);
+  const loop=[];for(const c of cor)loop.push(...c.P);loop.push(loop[0]);P(fanGeo([cx,cz],loop,y+.0001),hwAll?RCOL.hasp:asp);
+  const start=new Map(A.map(a=>[a,0]));for(const c of cor){start.set(c.a,Math.max(start.get(c.a),c.sA));start.set(c.b,Math.max(start.get(c.b),c.sB));}
+  for(const c of cor){const sw=(c.a.g.sw+c.b.g.sw)/2,bka=c.a.g.bk,bkb=c.b.g.bk,noSw=c.a.g.sws==='n'||c.b.g.sws==='n';
+    if(!noSw&&sw>0){P(bandGeo(c.P,polyOff(c.P,sw,cx,cz),y+.006),RCOL.walk);P(bandGeo(c.P,polyOff(c.P,.012,cx,cz),y+.0065),RCOL.curb);}
+    else P(bandGeo(c.P,polyOff(c.P,.06,cx,cz),y-.0004),RCOL.verge);
+    if(bka||bkb){const bf=v=>-(bka*(1-v)+bkb*v);P(bandGeo(c.P,polyOff(c.P,bf,cx,cz),y+.0012),RCOL.bike);P(bandGeo(polyOff(c.P,v=>bf(v)+.0035,cx,cz),polyOff(c.P,v=>bf(v)-.0035,cx,cz),y+.0016),RCOL.wht);}
+    else if(!noSw&&[c.a,c.b].every(x=>x.g.r===RT.a||x.g.r===RT.b))P(bandGeo(polyOff(c.P,-.012,cx,cz),polyOff(c.P,-.02,cx,cz),y+.0014),RCOL.wht);}
+  // arm markings between the rounded corners and the tile edge, with a stop line and a zebra where people cross
+  const many=A.length>2;
+  for(const a of A){const s0=Math.min(.42,start.get(a)),E=Math.max(.5,Math.hypot(a.pt[0]-cx,a.pt[1]-cz)),r=rgt(a.u),g=a.g,rr=g.r,Q=(s,l)=>[cx+a.u[0]*s+r[0]*l,cz+a.u[1]*s+r[1]*l],
+      quad=(s1,s2,l1,l2,yy,col)=>{if(s2-s1<.004)return;const p=[Q(s1,l1),Q(s1,l2),Q(s2,l2),Q(s2,l1)];P(upGeo([p[0][0],yy,p[0][1],p[1][0],yy,p[1][1],p[2][0],yy,p[2][1],p[0][0],yy,p[0][1],p[2][0],yy,p[2][1],p[3][0],yy,p[3][1]]),col);};
+    if(a.c)continue;// a curve arm carries its own markings from the tile edge on
+    const ym=y+.0012,sm=many&&g.sws!=='n'?s0+.11:s0;
+    if(rr===RT.s){for(let s1=sm+.02;s1<E;s1+=.25)quad(s1,Math.min(E,s1+.12),-.009,.009,ym,RCOL.yel);}
+    else if(rr===RT.a){quad(sm,E,-.016,-.007,ym,RCOL.yel);quad(sm,E,.007,.016,ym,RCOL.yel);}
+    else if(rr===RT.b){quad(sm+.02,E,-rr.med,rr.med,y+.0135,RCOL.med);}
+    else if(g.hw){quad(s0,E,-.05,-.04,ym,RCOL.yel);quad(s0,E,.04,.05,ym,RCOL.yel);}
+    if(many&&g.sws!=='n'){const w=g.r.cw;quad(s0+.095,s0+.11,0,w,ym,RCOL.wht);for(let l=-w+.02;l<w-.01;l+=.05)quad(s0+.02,s0+.085,l,l+.025,ym,RCOL.wht);}}}
+// a car's way across a node: from the entry arm's lane, round in a Bezier, onto the exit arm's lane
+const _ndP=new Map();
+function nodeCurve(a,prev,b,off){const A=nodeArms(a);if(!A)return null;const ai=A.find(x=>x.n===prev),bi=A.find(x=>x.n===b);if(!ai||!bi||ai===bi)return null;const k=key(a)+'|'+key(prev)+'|'+key(b)+'|'+off.toFixed(3)+'|'+_ndGen;let Q=_ndP.get(k);if(Q)return Q;
+  const hin=[-ai.u[0],-ai.u[1]],ri=rgt(hin),ro=rgt(bi.u),E=[ai.pt[0]+ri[0]*off,ai.pt[1]+ri[1]*off],X=[bi.pt[0]+ro[0]*off,bi.pt[1]+ro[1]*off],D=Math.hypot(X[0]-E[0],X[1]-E[1]),kk=Math.max(.15,D*.38);
+  const c1=[E[0]+hin[0]*kk,E[1]+hin[1]*kk],c2=[X[0]-bi.u[0]*kk,X[1]-bi.u[1]*kk],W=[],S=[0];for(let i=0;i<=24;i++){const v=i/24,w0=(1-v)**3,w1=3*(1-v)**2*v,w2=3*(1-v)*v*v,w3=v**3;W.push([w0*E[0]+w1*c1[0]+w2*c2[0]+w3*X[0],w0*E[1]+w1*c1[1]+w2*c2[1]+w3*X[1]]);if(i)S.push(S[i-1]+Math.hypot(W[i][0]-W[i-1][0],W[i][1]-W[i-1][1]));}
+  Q={W,S,L:S[24]};if(_ndP.size>4000)_ndP.clear();_ndP.set(k,Q);return Q;}
+function nodePath(a,prev,b,p,off){const Q=nodeCurve(a,prev,b,off);if(!Q)return null;const r=connAt(Q,p);_ppH=null;return r;}
+function nodeLen(a,prev,b){const Q=nodeCurve(a,prev,b,.1);return Q?Q.L:1;}
+// would a new road leaving tile E heading u (outward) fit between the arms already there?
+function armFits(E,u,C){if(!E.road)return true;for(const a of armsOf(E)){let d=Math.abs(Math.atan2(a.u[0]*u[1]-a.u[1]*u[0],a.u[0]*u[0]+a.u[1]*u[1]));if(d<armGap(C,a.g.C)-.02)return false;}return true;}
 
 // ---- flat ground geometry helpers (triangles always face up) ----
 function upGeo(pos){const p=new Float32Array(pos),nr=new Float32Array(pos.length),uv=new Float32Array(pos.length/3*2);for(let i=0;i<pos.length/3;i++){nr[i*3+1]=1;uv[i*2]=p[i*3]*1.5;uv[i*2+1]=p[i*3+2]*1.5;}
@@ -2408,7 +2467,7 @@ function furnUpdate(){const n={bench:0,bin:0,hydrant:0,planter:0},put=(k,x,z,ry)
 function lampUpdate(dt){lampT-=dt;if(!lampsDirty||lampT>0||!G)return;furnUpdate();sgnUpdate();lampT=.4;lampsDirty=false;let n=0;
   if(G.curves)for(const id in G.curves){const c=G.curves[id];if(!c.S)continue;const g=CURVE_G(c),e=g.hw?.47:Math.min(.47,g.C+Math.max(.018,g.sw*.15));let side=1;
     for(let ss=.6;ss<c.S.len-.3&&n<LAMPMAX;ss+=1.6){const q=curveAt(c,ss),nx=-q.tz,nz=q.tx;dummy.position.set(q.x+nx*side*e,curveH(c,ss),q.z+nz*side*e);dummy.rotation.set(0,Math.atan2(-nx*side,-nz*side),0);dummy.scale.set(1,1,1);dummy.updateMatrix();for(const im of[lampPole,lampBulb,lampPool,lampHalo])im.setMatrixAt(n,dummy.matrix);n++;side=-side;}}
-  for(const t of G.tiles){if(!t.road||t.water||t.cv||t.xo||t.xw||t.bs||n>=LAMPMAX)continue;if(t._ramp&&t.rt!=='h'&&[[1,0],[-1,0],[0,1],[0,-1]].some(([a,b])=>{const q=T(t.x+a,t.z+b);return q&&q.ix==='ichg';}))continue;const m=roadMask(t),ew=(m&10)&&!(m&5),ns=(m&5)&&!(m&10);
+  for(const t of G.tiles){if(!t.road||t.water||t.cv||t.xo||t.xw||t.bs||n>=LAMPMAX||nodeArms(t))continue;if(t._ramp&&t.rt!=='h'&&[[1,0],[-1,0],[0,1],[0,-1]].some(([a,b])=>{const q=T(t.x+a,t.z+b);return q&&q.ix==='ichg';}))continue;const m=roadMask(t),ew=(m&10)&&!(m&5),ns=(m&5)&&!(m&10);
     const g=roadGeo(t),pl=poleLine(t),e=pl?pl.v:g.hw?.47:Math.min(.47,g.C+Math.max(.018,g.sw*.15));
     if(ew&&t.x%2===1){const side=pl?1:(((t.x-1)/2)%2?1:-1);dummy.position.set(wx(t.x),0,wx(t.z)+side*e);dummy.rotation.set(0,side>0?Math.PI:0,0);}
     else if(ns&&t.z%2===1){const side=pl?1:(((t.z-1)/2)%2?1:-1);dummy.position.set(wx(t.x)+side*e,0,wx(t.z));dummy.rotation.set(0,side>0?-Math.PI/2:Math.PI/2,0);}
@@ -2474,7 +2533,7 @@ function lightState(t,ew){if(t.ix&&t.ix!=='sig')return 0;const k=tlT();TL_T=k.T;
   if(ew)return ph<k.g?0:ph<k.g+k.a?1:2;return ph<k.half?2:ph<k.half+k.g?0:ph<k.half+k.g+k.a?1:2;}
 const _hide=new THREE.Matrix4().makeScale(0,0,0);
 function rebuildLights(){tlDirty=false;tlList=[];interSet=new Set();let ns=0,nm=0;
-  let ni=0;for(const t of G.tiles){if(!t.road||t.water||t.cv)continue;const nb=roadNeighbors(t);if(nb.length<3)continue;interSet.add(key(t));
+  let ni=0;for(const t of G.tiles){if(!t.road||t.water||t.cv)continue;const nb=roadNeighbors(t);if(nb.length<3)continue;interSet.add(key(t));if(nodeArms(t))continue;
     if(t.ix==='round'&&!t.cv&&ni<ISLMAX){dummy.position.set(wx(t.x),0,wx(t.z));dummy.rotation.set(0,(t.x*7+t.z*3)%6,0);dummy.scale.setScalar(1);dummy.updateMatrix();islandM.setMatrixAt(ni++,dummy.matrix);}
     if(t.ix&&t.ix!=='sig')continue;
     for(const n of nb){if(tlList.length>=TLMAX)break;const dx=t.x-n.x,dz=t.z-n.z,g=roadGeo(n),mast=rtOf(n).lanes>1,e=g.hw?.48:Math.min(.47,roadGeo(t).C+Math.max(.018,roadGeo(t).sw*.15));
@@ -2496,7 +2555,7 @@ function updateLightsTL(dt){
 }
 // position + heading along a tile: quadratic curve through the tile centre, or a looped U-turn at a dead end
 const _pp={x:0,z:0,tx:0,tz:1};
-function pathAt(a,prev,b,p,off){_cvS=null;_ppH=null;if(_pcar&&_pcar.a===a){const r=connPath(_pcar,p);if(r)return r;}if(a.ix==='ichg'&&b!==prev&&prev!==a&&!a.cv&&a._mOv==null){const I=ichgInfo(a);if(I){const r=ichgPath(a,prev,b,p,off);if(r)return r;}}if(a._cvl&&b!==prev&&a._cvT&&(a._cvT.has(prev)||a._cvT.has(b)))return tapPath(a,prev,b,p,off);if(a._cvl&&b!==prev){const c=G.curves[a.cv];if(c&&c.S)return curvePath(c,a,prev,b,p,off);}const cx=wx(a.x),cz=wx(a.z);
+function pathAt(a,prev,b,p,off){_cvS=null;_ppH=null;if(_pcar&&_pcar.a===a){const r=connPath(_pcar,p);if(r)return r;}if(a.ix==='ichg'&&b!==prev&&prev!==a&&!a.cv&&a._mOv==null){const I=ichgInfo(a);if(I){const r=ichgPath(a,prev,b,p,off);if(r)return r;}}if(a._cvl&&b!==prev&&a._cvT&&(a._cvT.has(prev)||a._cvT.has(b)))return tapPath(a,prev,b,p,off);if(!a.cv&&b!==prev&&prev!==a&&b!==a&&nodeArms(a)){const r=nodePath(a,prev,b,p,off);if(r)return r;}if(a._cvl&&b!==prev){const c=G.curves[a.cv];if(c&&c.S)return curvePath(c,a,prev,b,p,off);}const cx=wx(a.x),cz=wx(a.z);
   if(a.ix==='round'&&b!==prev&&prev!==a&&!a.cv&&isJn(a))return roundPath(a,prev,b,p,off);
   if(b===prev&&prev!==a){const ux=Math.sign(a.x-prev.x),uz=Math.sign(a.z-prev.z),nx=-uz,nz=ux,r=Math.max(.02,Math.abs(off)),d0=Math.min(.5,.95-r),La=Math.PI*r,Lt=2*d0+La,s=p*Lt,ex=cx-ux*.5,ez=cz-uz*.5;
     if(s<d0){_pp.x=ex+ux*s+nx*off;_pp.z=ez+uz*s+nz*off;_pp.tx=ux;_pp.tz=uz;}
@@ -2802,6 +2861,7 @@ function updateCars(dt){
     if(lead<9&&step>lead-gmin){step=Math.max(0,lead-gmin);c.cur=Math.min(c.cur,step/Math.max(dt,1e-4));}
     c.brake=dv<-.05||c.cur<.12;
     if(c.a._cvl&&G.curves[c.a.cv]){const cc=G.curves[c.a.cv];step/=clamp(cc.bd[c.a.cvi+1]-cc.bd[c.a.cvi],.35,2.2);}
+    else if(!c.a.cv&&c.prev&&c.b&&c.b!==c.prev&&c.prev!==c.a&&nodeArms(c.a))step/=clamp(nodeLen(c.a,c.prev,c.b),.35,2.2);
     else if(c._clA===c.a&&c._cl)step/=clamp(c._cl,.3,4);
     else if((c.a.ix==='ichg'||c.a.ix==='round')&&c.b&&c.prev&&c.b!==c.prev&&c.prev!==c.a){if(c._plA!==c.a||c._plB!==c.b){c._plA=c.a;c._plB=c.b;c._pl=c.a.ix==='ichg'?ichgLen(c.a,c.prev,c.b,c.offC):1.4;}step/=clamp(c._pl,.5,6);}
     c.p+=step;
@@ -4230,13 +4290,13 @@ function renderCats(){
       :`<div class="cf"><div class="txt"><b>City limits · ${n} of ${NP*NP} plots</b><small>${n<NP*NP?'Tap a highlighted plot next to your city to buy it · next plot '+(G.mode==='sandbox'?'free':fmt(pr)):'Your city owns the whole map'}</small></div><button class="rb no" id="lDone" aria-label="Close city limits" title="Close">${SVG_NO}</button></div>`;}
   else if(cat==='demolish')h=`<button data-t="done" class="on" aria-label="Stop demolishing">${SVG_OK.replace('<svg ','<svg width="22" height="22" style="fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round" ')}<small>done</small></button>`+DEMO.map(([id,label,col])=>`<button data-t="${id}" class="${tool===id?'on':''}">${col?`<span class="sw" style="background:${col}"></span>`:''}${label}<small>${id==='undo'?(undoSnap?'last demolish':'nothing yet'):'tap or drag'}</small></button>`).join('');
   else if(cat==='build'&&tool==='lines')h=linesBar();
-  else if(cat==='build'&&isBuildTool(tool)){const f=toolInfo(tool),ro=isRoadTool(tool)&&tool!=='highway';h=`<div class="cf">${icon(tool,f.col)}<div class="txt"><b>${f.name}</b><small>${curveOn()?`Tap start, end, then where it bends · bend <b id="cvDeg">${cvd&&cvd.deg!=null?cvd.deg+'°':'–'}</b>`:PAINT.has(tool)?(matchMedia('(pointer:coarse)').matches?'Tap start, then end point':'Drag on the map'):'Tap the map to place'}${needConfirm(matchMedia('(pointer:coarse)').matches)?', then tap ✓':''} · ${G.mode==='sandbox'?'free':f.perTile?fmt(f.cost)+'/tile':fmt(f.cost)}</small></div>${ro?`<div class="ropt" role="group" aria-label="Road options">${[['n','No sidewalk'],['b','Sidewalks'],['t','Sidewalks with trees']].map(([k,l])=>`<button data-sw="${k}" class="ib ${roadOpt.sw===k?'on':''}" aria-label="${l}" title="${l}">${SWI[k]}</button>`).join('')}<button data-bk="1" class="ib ${roadOpt.bk?'on':''}" aria-label="Bike lanes" title="Bike lanes">${SWI.bk}</button></div>`:''}${isRoadTool(tool)?`<div class="ropt" role="group" aria-label="Road shape"><button data-cv="0" class="ib ${!roadOpt.cv?'on':''}" aria-label="Straight road" title="Straight">${SWI.st}</button><button data-cv="1" class="ib ${roadOpt.cv?'on':''}" aria-label="Curved road" title="Curved">${SWI.cv}</button>${roadOpt.cv?`<button data-snap="1" class="ib ${snapOn?'on':''}" aria-label="Snap bends to 15 degrees" title="Snap bends to 15°" style="font-size:11px;font-weight:700">15°</button>`:''}</div>`:''}${tool==='junction'?`<div class="ropt" role="group" aria-label="Junction type" style="flex-wrap:wrap">${IX_OPTS.map(([k,l])=>`<button data-ix="${k}" class="ib ${ixOpt===k?'on':''}" style="width:auto;height:auto;padding:4px 6px;font-size:10px;font-weight:700;line-height:1.1;max-width:84px">${ixPic(k)}${l}</button>`).join('')}</div>`:''}${tool==='roadsign'||tool==='roadmark'?`<div class="ropt" role="group" aria-label="Type">${(tool==='roadsign'?SG_OPTS:MK_OPTS).map(([k,l])=>`<button data-sg="${k}" class="ib ${(tool==='roadsign'?sgOpt:mkOpt)===k?'on':''}" style="width:auto;padding:0 8px;font-size:11px;font-weight:700">${l}</button>`).join('')}</div>`:''}<button id="chChange">Change</button><button class="rb no" id="chDone" aria-label="Stop building" title="Stop building">${SVG_NO}</button></div>`;}
+  else if(cat==='build'&&isBuildTool(tool)){const f=toolInfo(tool),ro=isRoadTool(tool)&&tool!=='highway';h=`<div class="cf">${icon(tool,f.col)}<div class="txt"><b>${f.name}</b><small>${curveOn()?`Tap start and end (any angle) · move the yellow handle to curve it · crossing roads makes junctions · bend <b id="cvDeg">${cvd&&cvd.deg!=null?cvd.deg+'°':'–'}</b>`:PAINT.has(tool)?(matchMedia('(pointer:coarse)').matches?'Tap start, then end point':'Drag on the map'):'Tap the map to place'}${needConfirm(matchMedia('(pointer:coarse)').matches)?', then tap ✓':''} · ${G.mode==='sandbox'?'free':f.perTile?fmt(f.cost)+'/tile':fmt(f.cost)}</small></div>${ro?`<div class="ropt" role="group" aria-label="Road options">${[['n','No sidewalk'],['b','Sidewalks'],['t','Sidewalks with trees']].map(([k,l])=>`<button data-sw="${k}" class="ib ${roadOpt.sw===k?'on':''}" aria-label="${l}" title="${l}">${SWI[k]}</button>`).join('')}<button data-bk="1" class="ib ${roadOpt.bk?'on':''}" aria-label="Bike lanes" title="Bike lanes">${SWI.bk}</button></div>`:''}${isRoadTool(tool)?`<div class="ropt" role="group" aria-label="Road shape"><button data-cv="0" class="ib ${!roadOpt.cv?'on':''}" aria-label="Straight road" title="Straight">${SWI.st}</button><button data-cv="1" class="ib ${roadOpt.cv?'on':''}" aria-label="Free road: any angle or a curve" title="Free road (any angle or curve)">${SWI.cv}</button>${roadOpt.cv?`<button data-snap="1" class="ib ${snapOn?'on':''}" aria-label="Snap bends to 15 degrees" title="Snap bends to 15°" style="font-size:11px;font-weight:700">15°</button>`:''}</div>`:''}${tool==='junction'?`<div class="ropt" role="group" aria-label="Junction type" style="flex-wrap:wrap">${IX_OPTS.map(([k,l])=>`<button data-ix="${k}" class="ib ${ixOpt===k?'on':''}" style="width:auto;height:auto;padding:4px 6px;font-size:10px;font-weight:700;line-height:1.1;max-width:84px">${ixPic(k)}${l}</button>`).join('')}</div>`:''}${tool==='roadsign'||tool==='roadmark'?`<div class="ropt" role="group" aria-label="Type">${(tool==='roadsign'?SG_OPTS:MK_OPTS).map(([k,l])=>`<button data-sg="${k}" class="ib ${(tool==='roadsign'?sgOpt:mkOpt)===k?'on':''}" style="width:auto;padding:0 8px;font-size:11px;font-weight:700">${l}</button>`).join('')}</div>`:''}<button id="chChange">Change</button><button class="rb no" id="chDone" aria-label="Stop building" title="Stop building">${SVG_NO}</button></div>`;}
   $('sub').innerHTML=h;
   $('sub').querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{if(b.dataset.t==='undo'){undoDemolish();return;}if(b.dataset.t==='done'){cat='view';tool='view';clearPreview();renderCats();return;}tool=b.dataset.t;renderCats();});
   if($('chChange'))$('chChange').onclick=openBuild;
   const saveRO=()=>{try{localStorage.setItem('metrob_roadopt',JSON.stringify(roadOpt));}catch(e){}renderCats();};
   $('sub').querySelectorAll('[data-sw]').forEach(b=>b.onclick=()=>{roadOpt.sw=b.dataset.sw;saveRO();toast({n:'No sidewalks: people will not walk here',b:'Standard sidewalks',t:'Sidewalks with street trees'}[roadOpt.sw]+' · drag over existing roads to change them');});
-  $('sub').querySelectorAll('[data-cv]').forEach(b=>b.onclick=()=>{roadOpt.cv=b.dataset.cv==='1';clearPreview();saveRO();toast(roadOpt.cv?'Curved road: tap the start, the end, then where it bends':'Straight roads');});
+  $('sub').querySelectorAll('[data-cv]').forEach(b=>b.onclick=()=>{roadOpt.cv=b.dataset.cv==='1';clearPreview();saveRO();toast(roadOpt.cv?'Free road: tap the start and the end at any angle, then move the handle to curve it. Where it meets or crosses a road a junction is made':'Grid roads');});
   $('sub').querySelectorAll('[data-ln]').forEach(b=>b.onclick=()=>{const a=b.dataset.ln;if(a.startsWith('new:')){lineEd={k:a.slice(4),stops:[]};lineSel=null;}else if(a==='undo'){if(lineEd)lineEd.stops.pop();}else if(a==='cancel')lineEd=null;else if(a==='finish'){lineFinish();return;}linesDraw();renderCats();});
   $('sub').querySelectorAll('[data-lsel]').forEach(b=>b.onclick=()=>{lineSel=lineSel===b.dataset.lsel?null:b.dataset.lsel;linesDraw();renderCats();});
   $('sub').querySelectorAll('[data-ldel]').forEach(b=>b.onclick=()=>lineDelete(b.dataset.ldel));
@@ -4687,40 +4747,82 @@ function curveH(c,s){const I=curveWater(c);if(!I.length)return 0;const L=c.S.len
 let _cvS=null;
 const adj4=(a,b)=>Math.abs(a.x-b.x)+Math.abs(a.z-b.z)===1;
 // work out a curve from A to B bending towards the point (cx,cz); says why if it cannot be built
-function planCurve(A,B,cx,cz,fd0){const res={ok:false,why:'',core:[],cover:[]};if(!A||!B||A===B||adj4(A,B)){res.why='Pick two points further apart';return res;}
-  const ax=wx(A.x),az=wx(A.z),bxw=wx(B.x),bzw=wx(B.z),ax1=(dx,dz)=>Math.abs(dx)>=Math.abs(dz)?[Math.sign(dx)||1,0]:[0,Math.sign(dz)||1];
-  const d0=fd0||ax1(cx-ax,cz-az),d1=ax1(bxw-cx,bzw-cz),p0=[ax+d0[0]*.5,az+d0[1]*.5],p3=[bxw-d1[0]*.5,bzw-d1[1]*.5],ch=Math.hypot(p3[0]-p0[0],p3[1]-p0[1]);
+function planCurve(A,B,cx,cz,fd0){if(!A||!B||A===B||adj4(A,B))return{ok:false,why:'Pick two points further apart',core:[],cover:[]};
+  const ax=wx(A.x),az=wx(A.z),bxw=wx(B.x),bzw=wx(B.z);
+  const un=(x,z)=>{const l=Math.hypot(x,z)||1;let u=[x/l,z/l];if(Math.abs(u[0])>.9996)u=[Math.sign(u[0]),0];if(Math.abs(u[1])>.9996)u=[0,Math.sign(u[1])];return u;},d0=fd0||un(cx-ax,cz-az),d1=un(bxw-cx,bzw-cz),p0=[ax+d0[0]*.5,az+d0[1]*.5],p3=[bxw-d1[0]*.5,bzw-d1[1]*.5],ch=Math.hypot(p3[0]-p0[0],p3[1]-p0[1]);
   const k0=clamp((cx-p0[0])*d0[0]+(cz-p0[1])*d0[1],.5,ch*1.2),k1=clamp((p3[0]-cx)*d1[0]+(p3[1]-cz)*d1[1],.5,ch*1.2);
-  const P=[p0,[p0[0]+d0[0]*k0,p0[1]+d0[1]*k0],[p3[0]-d1[0]*k1,p3[1]-d1[1]*k1],p3];res.P=P;const S=sampleCurve(P);res.S=S;
+  const P=[p0,[p0[0]+d0[0]*k0,p0[1]+d0[1]*k0],[p3[0]-d1[0]*k1,p3[1]-d1[1]*k1],p3];const res=planP(A,B,P,{});res.d0=d0;res.d1=d1;return res;}
+// ---- cubic Bezier helpers for splitting roads where they meet
+function bzP(P,t){const u=1-t,a=u*u*u,b=3*u*u*t,c=3*u*t*t,d=t*t*t;return[a*P[0][0]+b*P[1][0]+c*P[2][0]+d*P[3][0],a*P[0][1]+b*P[1][1]+c*P[2][1]+d*P[3][1]];}
+function subBez(P,t0,t1){const sp=(Q,t)=>{const L=(a,b)=>[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t],a=L(Q[0],Q[1]),b=L(Q[1],Q[2]),c=L(Q[2],Q[3]),d=L(a,b),e=L(b,c),f=L(d,e);return[[Q[0],a,d,f],[f,e,c,Q[3]]];};let Q=sp(P,t1)[0];if(t0>1e-6)Q=sp(Q,t0/t1)[1];return Q.map(p=>p.slice());}
+function circT(P,cx,cz,R=.5){let ti=null,to=null;for(let i=0;i<=600;i++){const t=i/600,p=bzP(P,t);if(Math.hypot(p[0]-cx,p[1]-cz)<R){if(ti==null)ti=t;to=t;}}return ti==null?null:[Math.max(0,ti-1/600),Math.min(1,to+1/600)];}
+// the end of a piece that meets a node leaves it straight out from the node centre
+function radEnd(Q,E,atEnd){const cx=wx(E.x),cz=wx(E.z),i=atEnd?3:0,j=atEnd?2:1,p=Q[i],l=Math.hypot(p[0]-cx,p[1]-cz)||1,u=[(p[0]-cx)/l,(p[1]-cz)/l],k=Math.max(.22,Math.min(1.2,Math.hypot(Q[j][0]-p[0],Q[j][1]-p[1])));Q[j]=[p[0]+u[0]*k,p[1]+u[1]*k];return Q;}
+const splitOK=t=>{const c=t&&t.cv&&G.curves[t.cv];return!!c&&!t.water&&t.cvi>=1&&t.cvi<=c.core.length-2&&c.P&&c.P.length===4;};
+const crossable=t=>!!t&&!t.water&&!t.rail&&!t.runway&&t.ix!=='ichg'&&!t.toll&&!t._tap&&((t.road&&!t.cv&&!t.cvo)||splitOK(t));
+// arms a tile will have: a curve core tile that gets split has its two halves as arms
+function armsAfter(E){if(E.cv){const c=G.curves[E.cv],cx=wx(E.x),cz=wx(E.z),r=circT(c.P,cx,cz),C=CURVE_G(c).C;if(!r)return[];return r.map(t=>{const p=bzP(c.P,t),l=Math.hypot(p[0]-cx,p[1]-cz)||1;return{u:[(p[0]-cx)/l,(p[1]-cz)/l],C};});}
+  return E.road?armsOf(E).map(a=>({u:a.u,C:a.g.C})):[];}
+function armsFit(list,news){const all=list.concat(news);for(const nw of news)for(const a of all){if(a===nw)continue;const d=Math.abs(Math.atan2(a.u[0]*nw.u[1]-a.u[1]*nw.u[0],a.u[0]*nw.u[0]+a.u[1]*nw.u[1]));if(d<armGap(a.C,nw.C)-.02)return false;}return true;}
+function planP(A,B,P,o){const res={ok:false,why:'',core:[],cover:[],P};const S=sampleCurve(P);res.S=S;const rt=ROADTOOL[tool]||'s',sw=rt==='h'?'n':roadOpt.sw,bk=rt!=='h'&&roadOpt.bk,gC=CURVE_G({rt,bk}).C;
   // tiles along the centre line, kept 4-connected
-  const core=[];let last=A;for(let i=1;i<S.x.length-1;i++){const t=tileOfPt(S.x[i],S.z[i]);if(!t){res.why='The curve leaves the map';return res;}if(t===last||t===A)continue;if(t===B)break;
-    if(!adj4(t,last)){const o1=T(last.x,t.z),o2=T(t.x,last.z),dist=o=>{let m=9;for(let j=Math.max(0,i-8);j<=i;j++)m=Math.min(m,Math.hypot(S.x[j]-wx(o.x),S.z[j]-wx(o.z)));return m;};const ins=!o2||(o1&&dist(o1)<dist(o2))?o1:o2;if(ins!==A&&ins!==B){core.push(ins);last=ins;}}
+  const core=[];let last=A;for(let i=1;i<S.x.length-1;i++){const t=tileOfPt(S.x[i],S.z[i]);if(!t){res.why='The road leaves the map';return res;}if(t===last||t===A)continue;if(t===B)break;
+    if(!adj4(t,last)){const o1=T(last.x,t.z),o2=T(t.x,last.z),dist=q=>{let m=9;for(let j=Math.max(0,i-8);j<=i;j++)m=Math.min(m,Math.hypot(S.x[j]-wx(q.x),S.z[j]-wx(q.z)));return m;};const ins=!o2||(o1&&dist(o1)<dist(o2))?o1:o2;if(ins!==A&&ins!==B){core.push(ins);last=ins;}}
     if(t!==last){core.push(t);last=t;}}
-  if(!core.length||!adj4(core[0],A)||!adj4(core[core.length-1],B)){res.why='Bend it a little less';return res;}
+  if(!core.length||!adj4(core[0],A)||!adj4(core[core.length-1],B)){res.why=o.piece?'Too close to the next junction':'Bend it a little less';return res;}
   if(new Set(core).size!==core.length||core.includes(B)){res.why='The road would cross itself';return res;}
-  res.core=core;res.d0=d0;res.d1=d1;
+  res.core=core;
   const busy=t=>!t||t.road||t.b||t.ref!=null||t.rail||t.runway||t.cv||t.cvo||t.icv||(t.metro&&t.mst),busyE=t=>busy(t)||t.water;
-  for(const t of core){if(!owned(t)){res.why='Part of it is outside the city limits';return res;}if(busy(t)){res.why=t.road||t.cv?'It runs into another road':'Something is in the way';res.bad=t;return res;}}
-  for(const E of[A,B]){if(!owned(E)){res.why='Outside the city limits';return res;}if(E.cv||E.cvo||E.water||(!E.road&&busyE(E))){res.why=E.water?'Start and end the curve on land (it can bridge the water in between)':'The ends need a road or clear land';return res;}}
+  // where it crosses another road a junction is made there (the other road is split if it is a curve)
+  const cross=[];for(let i=0;i<core.length;i++){const t=core[i];if(!o.piece&&(t.road||t.cv)&&crossable(t)&&i>0&&i<core.length-1){const ctr=Math.min(...S.x.map((x,j)=>Math.hypot(x-wx(t.x),S.z[j]-wx(t.z))));if(ctr<.45){cross.push(t);continue;}}}
+  const nearX=t=>cross.concat([A,B].filter(E=>E.road||E.cv)).some(X=>Math.max(Math.abs(X.x-t.x),Math.abs(X.z-t.z))<=1);
+  for(const t of core){if(cross.includes(t))continue;if(!owned(t)){res.why='Part of it is outside the city limits';return res;}if(busy(t)&&!(nearX(t)&&t.cvo&&!t.road&&!t.b&&t.ref==null)){res.why=t.road||t.cv?'It runs along another road':'Something is in the way';res.bad=t;return res;}}
+  for(const E of[A,B]){if(!owned(E)){res.why='Outside the city limits';return res;}if(E.cv&&!splitOK(E)){res.why='Join the curve further from its ends';res.bad=E;return res;}if(E.cvo||E.water||(!E.road&&!E.cv&&busyE(E))){res.why=E.water?'Start and end on land (it can bridge the water in between)':'The ends need a road or clear land';return res;}}
   // land the pavement covers next to the centre line
   const cs=new Set(core),cov=[];let x0=1e9,x1=-1e9,z0=1e9,z1=-1e9;for(const t of core){x0=Math.min(x0,t.x);x1=Math.max(x1,t.x);z0=Math.min(z0,t.z);z1=Math.max(z1,t.z);}
   for(let z=z0-1;z<=z1+1;z++)for(let x=x0-1;x<=x1+1;x++){const t=T(x,z);if(!t||cs.has(t)||t===A||t===B)continue;let m=9;for(let i=0;i<S.x.length;i+=2)m=Math.min(m,Math.hypot(S.x[i]-wx(x),S.z[i]-wx(z)));
     if(m<1&&t.tree&&!t.b&&t.ref==null)(res.clear=res.clear||[]).push(t);
-    if(m<.78){if(t.road||t.cv||t.cvo||t.b||t.ref!=null||t.rail||(t.metro&&t.mst)||t.runway||!owned(t)){res.why=!owned(t)?'Too close to the city limits':'Too close to something else';res.bad=t;return res;}cov.push(t);}}
-  res.cover=cov;const rt=ROADTOOL[tool]||'s',sw=rt==='h'?'n':roadOpt.sw,bk=rt!=='h'&&roadOpt.bk;
-  res.cost=Math.round((core.length*1.25+(A.road?0:1)+(B.road?0:1))*roadCost(rt,sw,bk,false)+core.filter(t=>t.water).length*roadCost(rt,sw,bk,true));res.ok=true;return res;}
+    if(m<.78){if(nearX(t)&&(t.road||t.cv||t.cvo)&&!t.b&&t.ref==null)continue;if(t.road||t.cv||t.cvo||t.b||t.ref!=null||t.rail||(t.metro&&t.mst)||t.runway||!owned(t)){res.why=!owned(t)?'Too close to the city limits':'Too close to something else';res.bad=t;return res;}cov.push(t);}}
+  res.cover=cov;
+  // the new arms must leave room for the kerbs of the arms already there
+  {const sA=S.x.length>3?[S.x[2]-wx(A.x),S.z[2]-wx(A.z)]:null,uA=un2(P[0][0]-wx(A.x),P[0][1]-wx(A.z)),uB=un2(P[3][0]-wx(B.x),P[3][1]-wx(B.z));
+    if(!armsFit(armsAfter(A),[{u:uA,C:gC}])||!armsFit(armsAfter(B),[{u:uB,C:gC}])){res.why='Too sharp an angle with the road already there';res.bad=!armsFit(armsAfter(A),[{u:uA,C:gC}])?A:B;return res;}}
+  res.cost=Math.round((core.length*1.25+(A.road?0:1)+(B.road?0:1))*roadCost(rt,sw,bk,false)+core.filter(t=>t.water).length*roadCost(rt,sw,bk,true));
+  if(cross.length){// cut the new road into pieces at each crossing and check every piece
+    const ends=[A,...cross,B],ts=cross.map(X=>circT(P,wx(X.x),wx(X.z)));if(ts.some(r=>!r)){res.why='Cross the other road nearer its middle';return res;}
+    const pcs=[];for(let i=0;i<ends.length-1;i++){const t0=i?ts[i-1][1]:0,t1=i<cross.length?ts[i][1-1]:1;if(t1-t0<.02){res.why='Junctions too close together';return res;}let Q=subBez(P,t0,t1);if(i)Q=radEnd(Q,ends[i],false);if(i<cross.length)Q=radEnd(Q,ends[i+1],true);
+      const pl=planP(ends[i],ends[i+1],Q,{piece:true});if(!pl.ok){res.why=pl.why;res.bad=pl.bad||ends[i+1];return res;}pcs.push({A:ends[i],B:ends[i+1],pl});}
+    for(const X of cross){const ins=[],tq=ts[cross.indexOf(X)];for(const t of tq){const p=bzP(P,t);ins.push({u:un2(p[0]-wx(X.x),p[1]-wx(X.z)),C:gC});}if(!armsFit(armsAfter(X),ins)){res.why='It crosses the other road at too sharp an angle';res.bad=X;return res;}}
+    res.pieces=pcs;res.cross=cross;res.cost=pcs.reduce((a,p)=>a+p.pl.cost,0);}
+  res.ok=true;return res;}
+const un2=(x,z)=>{const l=Math.hypot(x,z)||1;return[x/l,z/l];};
 // tile links, ranges along the curve and flags, from the saved description
 function linkCurve(id){const c=G.curves[id];if(!c)return;c.S=sampleCurve(c.P);const core=c.core.map(k=>G.tiles[k]),A=G.tiles[c.A],B=G.tiles[c.B];
   core.forEach((t,i)=>{t.cv=id;t.cvi=i;t._cvl=[i?core[i-1]:A,i<core.length-1?core[i+1]:B];});c.cover.forEach(k=>{G.tiles[k].cvo=id;});
   // where each core tile starts and ends along the curve: nearest point to the edge it shares with the next tile
   const S=c.S,bd=[0];for(let i=0;i<core.length-1;i++){const mx=(wx(core[i].x)+wx(core[i+1].x))/2,mz=(wx(core[i].z)+wx(core[i+1].z))/2;let best=0,bs=0;for(let j=0;j<S.x.length;j++){const d=Math.hypot(S.x[j]-mx,S.z[j]-mz);if(!j||d<best){best=d;bs=S.s[j];}}bd.push(Math.max(bs,bd[bd.length-1]+.05));}
   bd.push(Math.max(S.len,bd[bd.length-1]+.05));c.bd=bd;refreshTaps();}
+// split a curve at one of its core tiles: the tile becomes a junction and the two halves meet it head on
+function splitCurveAt(X){const id=X.cv,c=G.curves[id];if(!c||!splitOK(X))return false;const cx=wx(X.x),cz=wx(X.z),r=circT(c.P,cx,cz);if(!r)return false;
+  const P1=radEnd(subBez(c.P,0,r[0]),X,true),P2=radEnd(subBez(c.P,r[1],1),X,false),i=X.cvi,core1=c.core.slice(0,i),core2=c.core.slice(i+1),S1=sampleCurve(P1),S2=sampleCurve(P2);
+  const near=(S,t)=>{let m=9;for(let j=0;j<S.x.length;j+=2)m=Math.min(m,Math.hypot(S.x[j]-wx(t.x),S.z[j]-wx(t.z)));return m;};
+  for(const k of c.core){const t=G.tiles[k];t.cv=null;t.cvi=null;t._cvl=null;}for(const k of c.cover)G.tiles[k].cvo=null;delete G.curves[id];
+  const cov1=[],cov2=[];for(const k of c.cover){const t=G.tiles[k];if(t===X)continue;(near(S1,t)<=near(S2,t)?cov1:cov2).push(k);}
+  const base={rt:c.rt,sw:c.sw,bk:c.bk},i1=id+'a'+Math.floor(Math.random()*1e3),i2=id+'b'+Math.floor(Math.random()*1e3);
+  G.curves[i1]={...base,P:P1,core:core1,cover:cov1,A:c.A,B:key(X)};G.curves[i2]={...base,P:P2,core:core2,cover:cov2,A:key(X),B:c.B};
+  X.road=true;X.rt=X.rt||c.rt;X.sw=X.sw||c.sw;X.bk=X.bk!=null?X.bk:c.bk;linkCurve(i1);linkCurve(i2);
+  for(const k of[...c.core,...c.cover,c.A,c.B])redrawAround(G.tiles[k]);return true;}
 function buildCurve(pl,A,B){const rt=ROADTOOL[tool]||'s',sw=rt==='h'?'n':roadOpt.sw,bk=rt!=='h'&&roadOpt.bk;if(!spend(pl.cost))return false;
+  for(const X of[A,B,...(pl.cross||[])])if(X.cv)splitCurveAt(X);
+  if(pl.pieces){let ok=true;for(const pc of pl.pieces){const q=planP(pc.A,pc.B,pc.pl.P,{piece:true});if(!q.ok){ok=false;continue;}q.cost=0;buildOne(q,pc.A,pc.B,rt,sw,bk);}if(pl.cross)for(const X of pl.cross)if(!X.road){X.road=true;X.rt=rt;X.sw=sw;X.bk=bk;}
+    lampsDirty=true;tlDirty=true;dirty=true;roadsT=0;Snd.play('road');return ok;}
+  buildOne(pl,A,B,rt,sw,bk);Snd.play('road');return true;}
+function buildOne(pl,A,B,rt,sw,bk){
   G.curves=G.curves||{};const id='c'+Date.now().toString(36)+Math.floor(Math.random()*1e4);
   for(const E of[A,B])if(!E.road){E.road=true;E.tree=false;E.zone=null;E.rt=rt;E.sw=sw;E.bk=bk;}
   for(const t of pl.core){t.road=true;t.tree=false;t.zone=null;t.rt=rt;t.sw=sw;t.bk=bk;t.buslane=false;}for(const t of pl.cover){t.tree=false;t.zone=null;}for(const t of pl.clear||[])if(!pl.cover.includes(t)){t.tree=false;setTree(t);}
-  G.curves[id]={rt,sw,bk,P:pl.P,core:pl.core.map(key),cover:pl.cover.map(key),A:key(A),B:key(B)};linkCurve(id);
-  for(const t of[A,B,...pl.core,...pl.cover])redrawAround(t);lampsDirty=true;tlDirty=true;dirty=true;roadsT=0;Snd.play('road');return true;}
+  for(const t of pl.core)t.cvo=null;G.curves[id]={rt,sw,bk,P:pl.P,core:pl.core.map(key),cover:pl.cover.map(key),A:key(A),B:key(B)};linkCurve(id);
+  for(const t of[A,B,...pl.core,...pl.cover])redrawAround(t);lampsDirty=true;tlDirty=true;dirty=true;roadsT=0;return true;}
 function removeCurve(id){const c=G.curves&&G.curves[id];if(!c)return 0;const ts=[];
   for(const k of c.core){const t=G.tiles[k];t.road=false;t.cv=null;t.cvi=null;t._cvl=null;ts.push(t);}for(const k of c.cover){const t=G.tiles[k];t.cvo=null;ts.push(t);}
   delete G.curves[id];for(const k of[c.A,c.B])ts.push(G.tiles[k]);ts.forEach(redrawAround);lampsDirty=true;tlDirty=true;roadsT=0;return c.core.length;}
@@ -4765,14 +4867,14 @@ function curvePreview(){if(!cvd||!cvd.B){hl.count=0;curveGhost(null);return;}con
   if(pl.S){const pts=[];for(let i=0;i<pl.S.x.length;i+=4)pts.push(new THREE.Vector3(pl.S.x[i],.09,pl.S.z[i]));cvLine.geometry.dispose();cvLine.geometry=new THREE.BufferGeometry().setFromPoints(pts);cvLine.material.color.set(pl.ok?0xffffff:0xff5252);cvLine.visible=!pl.ok;}
   curveConfirm();}
 function curveConfirm(){const pl=cvd&&cvd.pl,f=toolInfo(tool);if(!pl)return;
-  $('sub').innerHTML=`<div class="cf">${icon(tool,f.col)}<div class="txt"><b>${pl.ok?'Curved '+f.name.toLowerCase()+' · '+Math.round(pl.S.len*25)+' m':pl.why}</b><small>${pl.ok&&G.mode!=='sandbox'?fmt(pl.cost)+' · ':''}${cvd.lock?'Drag the yellow handle to reshape · ✓ to build':matchMedia('(pointer:coarse)').matches?'Tap where it should bend':'Move to bend it, click to set'}</small></div><button class="rb no" id="pNo" aria-label="Cancel" title="Cancel">${SVG_NO}</button><button class="rb ok" id="pOk" aria-label="Build curved road" title="Build" ${pl.ok?'':'disabled'}>${SVG_OK}</button></div>`;
+  $('sub').innerHTML=`<div class="cf">${icon(tool,f.col)}<div class="txt"><b>${pl.ok?f.name+' · '+Math.round(pl.S.len*25)+' m'+(pl.cross&&pl.cross.length?' · '+pl.cross.length+' new junction'+(pl.cross.length>1?'s':''):''):pl.why}</b><small>${pl.ok&&G.mode!=='sandbox'?fmt(pl.cost)+' · ':''}${cvd.lock?'Drag the yellow handle to reshape · ✓ to build':matchMedia('(pointer:coarse)').matches?'Tap where it should bend':'Move to bend it, click to set'}</small></div><button class="rb no" id="pNo" aria-label="Cancel" title="Cancel">${SVG_NO}</button><button class="rb ok" id="pOk" aria-label="Build curved road" title="Build" ${pl.ok?'':'disabled'}>${SVG_OK}</button></div>`;
   $('pNo').onclick=()=>{curveReset();clearPreview();renderCats();};
   $('pOk').onclick=()=>{const c=cvd;if(c&&c.pl&&c.pl.ok&&buildCurve(c.pl,c.A,c.B)){const nB=c.B,d1=c.pl.d1;curveReset();clearPreview();renderCats();updateHUD();
       // keep drawing: the next curve starts where this one ended, heading the same way
-      cvd={A:nB,fd0:d1};curveGhost(null);toast('Curved road built · tap the next end point to continue, or ✕ to stop',2600);return;}curveReset();clearPreview();renderCats();updateHUD();};}
+      cvd={A:nB,fd0:d1};curveGhost(null);toast('Road built · tap the next end point to continue, or ✕ to stop',2600);return;}curveReset();clearPreview();renderCats();updateHUD();};}
 function curveTap(t,wxp,wzp){if(!owned(t)){landHint();return;}
   if(!cvd||!cvd.A){cvd={A:t};curveGhost(null);toast('Now tap where the curve ends');return;}
-  if(!cvd.B){if(t===cvd.A||adj4(t,cvd.A)){toast('Pick an end point further away');return;}cvd.B=t;if(cvd.fd0){const L=Math.hypot(wx(t.x)-wx(cvd.A.x),wx(t.z)-wx(cvd.A.z))*.5;cvd.cx=wx(cvd.A.x)+cvd.fd0[0]*L;cvd.cz=wx(cvd.A.z)+cvd.fd0[1]*L;}else{cvd.cx=(wx(cvd.A.x)+wx(t.x))/2+(wx(t.z)-wx(cvd.A.z))*.25;cvd.cz=(wx(cvd.A.z)+wx(t.z))/2-(wx(t.x)-wx(cvd.A.x))*.25;}cvd.lock=false;curvePreview();return;}
+  if(!cvd.B){if(t===cvd.A||adj4(t,cvd.A)){toast('Pick an end point further away');return;}cvd.B=t;if(cvd.fd0){const L=Math.hypot(wx(t.x)-wx(cvd.A.x),wx(t.z)-wx(cvd.A.z))*.5;cvd.cx=wx(cvd.A.x)+cvd.fd0[0]*L;cvd.cz=wx(cvd.A.z)+cvd.fd0[1]*L;}else{cvd.cx=(wx(cvd.A.x)+wx(t.x))/2;cvd.cz=(wx(cvd.A.z)+wx(t.z))/2;}cvd.lock=false;curvePreview();return;}
   [cvd.cx,cvd.cz]=snapBend(wxp,wzp);cvd.lock=true;curvePreview();}
 function curveHover(px,py){if(!cvd||!cvd.B||cvd.lock)return;if(!tileAt(px,py))return;[cvd.cx,cvd.cz]=snapBend(hit.x,hit.z);curvePreview();}
 // bends lock to 15° steps: the start heading and the end heading both snap, and the bend point sits where those two lines meet
