@@ -988,6 +988,9 @@ function roadParts(t,out){const i0=out.road.length,j0=out.bdet?out.bdet.length:0
   if(t.road&&!t.cv)for(const[dx,dz]of[[1,0],[-1,0],[0,1],[0,-1]]){const J=T(t.x+dx,t.z+dz);if(!J)continue;
     if(J.ix==='rbig'&&rbInfo(J)){const cx=wx(J.x),cz=wx(J.z),rc=RB_R+RB_W+.012;clipOut(out,i0,j0,(x,z)=>Math.hypot(x-cx,z-cz)>rc);}
     else if(J.ix==='slip'&&slipInfo(J)){const L=slipLanes(J);clipOut(out,i0,j0,(x,z)=>L.every(q=>q.dist(x,z)>SLIP_W+.012));}}
+  // ramp terminals on an interchange approach: no sidewalk, kerb or edge line across the ramp mouths
+  if(t._ramp&&t._ramp[4]===1){const[dx,dz]=t._ramp,X=wx(t.x),Z=wx(t.z),sT=1-DIA_T,Cq=roadGeo(t).C;
+    clipBand(out,i0,j0,(x,z)=>(x-X)*dx+(z-Z)*dz,sT-RW-.1,sT+RW+.1,(x,z)=>Math.abs((x-X)*-dz+(z-Z)*dx)>Cq-.024,c=>c===RCOL.walk||c===RCOL.curb||c===RCOL.wht||c===RCOL.bike);}
   // a boulevard approaching an interchange: open the median at the ramp terminal so traffic can turn left there
   if(t._ramp&&t._ramp[4]===1&&roadGeo(t).r===RT.b){const[dx,dz]=t._ramp,X=wx(t.x),Z=wx(t.z),sT=1-DIA_T,mw=RT.b.med+.012;
     clipOut(out,i0,j0,(x,z)=>Math.abs((x-X)*-dz+(z-Z)*dx)>=mw,c=>c===RCOL.med||c===RCOL.curb);
@@ -995,6 +998,17 @@ function roadParts(t,out){const i0=out.road.length,j0=out.bdet?out.bdet.length:0
     for(let a=-.5;a<.5-1e-6;a+=.1){const b=a+.1;if(b>sT-.19&&a<sT+.19)continue;const m=(a+b)/2,px=X+dx*m,pz=Z+dz*m,h=.012+rampAt(t,px,pz),ang=Math.atan2(dx,dz),w=RT.b.med*2;
       out.road.push([new THREE.BoxGeometry(w,.012,.1).rotateY(ang).translate(px,h+.006,pz),RCOL.curb],[new THREE.BoxGeometry(w-.016,.0135,.1).rotateY(ang).translate(px,h+.007,pz),RCOL.med]);}}}
 // drop the triangles of the geometry added since (i0,j0) whose centre fails keep(x,z)
+/* cut a band out of the geometry: triangles whose centroid lies in zone(x,z) lose the part with lo<sf(x,z)<hi
+   (triangles are split exactly at the band edges, so long strips get a clean opening) */
+function clipBand(out,i0,j0,sf,lo,hi,zone,only){const f=arr=>{if(!arr)return;for(const e of arr){if(only&&!only(e[1]))continue;let g=e[0];if(!g||!g.attributes||!g.attributes.position)continue;if(g.index)g=g.toNonIndexed();
+    const at=Object.keys(g.attributes).map(nm=>[nm,g.attributes[nm]]),P=g.attributes.position.array,n=P.length/9,outV={};for(const[nm]of at)outV[nm]=[];let changed=false;
+    const vert=(ti,k)=>at.map(([nm,a])=>Array.from(a.array.slice((ti*3+k)*a.itemSize,(ti*3+k+1)*a.itemSize))),lerp=(A,B,t)=>A.map((v,j)=>v.map((x,q)=>x+(B[j][q]-x)*t)),push=(V)=>at.forEach(([nm],j)=>outV[nm].push(...V[j]));
+    const clipH=(poly,keepLow,c)=>{const res=[];for(let i=0;i<poly.length;i++){const A=poly[i],B=poly[(i+1)%poly.length],sa=sf(A[0][0],A[0][2]),sb=sf(B[0][0],B[0][2]),ina=keepLow?sa<=c:sa>=c,inb=keepLow?sb<=c:sb>=c;if(ina)res.push(A);if(ina!==inb)res.push(lerp(A,B,(c-sa)/(sb-sa)));}return res;};
+    for(let i=0;i<n;i++){const k=i*9,cx=(P[k]+P[k+3]+P[k+6])/3,cz=(P[k+2]+P[k+5]+P[k+8])/3,V=[0,1,2].map(q=>vert(i,q));
+      const ss=V.map(v=>sf(v[0][0],v[0][2]));if(!zone(cx,cz)||Math.max(...ss)<=lo||Math.min(...ss)>=hi){V.forEach(push);continue;}changed=true;
+      for(const poly of[clipH(V,true,lo),clipH(V,false,hi)])for(let q=1;q+1<poly.length;q++){push(poly[0]);push(poly[q]);push(poly[q+1]);}}
+    if(!changed){e[0]=g;continue;}const ng=new THREE.BufferGeometry();for(const[nm,a]of at)ng.setAttribute(nm,new THREE.BufferAttribute(new a.array.constructor(outV[nm]),a.itemSize,a.normalized));e[0]=ng;}};
+  f(out.road.slice(i0));if(out.bdet)f(out.bdet.slice(j0));}
 function clipOut(out,i0,j0,keep,only){const f=arr=>{if(!arr)return;for(const e of arr){if(only&&!only(e[1]))continue;let g=e[0];if(!g||!g.attributes||!g.attributes.position)continue;if(g.index)g=g.toNonIndexed();const p=g.attributes.position.array,n=p.length/9,ok=[];let drop=0;
     for(let i=0;i<n;i++){const k=i*9;if(keep((p[k]+p[k+3]+p[k+6])/3,(p[k+2]+p[k+5]+p[k+8])/3))ok.push(i);else drop++;}if(!drop){e[0]=g;continue;}
     const ng=new THREE.BufferGeometry();for(const nm in g.attributes){const a=g.attributes[nm],sz=a.itemSize,src=a.array,dst=new src.constructor(ok.length*3*sz);ok.forEach((ti,j)=>{for(let q=0;q<3*sz;q++)dst[j*3*sz+q]=src[ti*3*sz+q];});ng.setAttribute(nm,new THREE.BufferAttribute(dst,sz,a.normalized));}e[0]=ng;}};
@@ -1089,7 +1103,7 @@ function roadParts0(t,out){
   if(t._ramp&&t._ramp[4]&&out.bdet){const[dx,dz]=t._ramp,px=-dz,pz=dx,E=C+(sws==='n'?.03:sw)+.012,pos=[];
     const seg=(a0,a1,u)=>{const n=6;for(let i=0;i<n;i++){const s0=a0+(a1-a0)*i/n,s1=a0+(a1-a0)*(i+1)/n,P0=[X+dx*s0+px*u,Z+dz*s0+pz*u],P1=[X+dx*s1+px*u,Z+dz*s1+pz*u],h0=.012+rampAt(t,P0[0],P0[1])+.006,h1=.012+rampAt(t,P1[0],P1[1])+.006;
       pos.push(P0[0],0,P0[1],P1[0],0,P1[1],P1[0],h1,P1[1],P0[0],0,P0[1],P1[0],h1,P1[1],P0[0],h0,P0[1]);}};
-    for(const sg of[-1,1]){const u=sg*E;if(t._ramp[4]===1){seg(-.5,(1-DIA_T)-.1,u);seg((1-DIA_T)+.1,.5,u);}else seg(-.5,.5,u);}
+    for(const sg of[-1,1]){const u=sg*E;if(t._ramp[4]===1){seg(-.5,(1-DIA_T)-RW-.12,u);seg((1-DIA_T)+RW+.12,.5,u);}else seg(-.5,.5,u);}
     const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(pos),3));g.computeVertexNormals();out.bdet.push([g,0xbdb7ac]);
     for(const sg of[-1,1]){const u=sg*(E+.006),a=-.5,b=.5,Q=(s2)=>[X+dx*s2+px*u,Z+dz*s2+pz*u];const p0=Q(a),p1=Q(b),h0=.012+rampAt(t,p0[0],p0[1])+.012,h1=.012+rampAt(t,p1[0],p1[1])+.012;
       const cap=new THREE.BufferGeometry(),w2=.008;cap.setAttribute('position',new THREE.BufferAttribute(new Float32Array([p0[0]-px*w2,h0,p0[1]-pz*w2,p1[0]-px*w2,h1,p1[1]-pz*w2,p1[0]+px*w2,h1,p1[1]+pz*w2,p0[0]-px*w2,h0,p0[1]-pz*w2,p1[0]+px*w2,h1,p1[1]+pz*w2,p0[0]+px*w2,h0,p0[1]+pz*w2]),3));cap.computeVertexNormals();if(t._ramp[4]!==1)out.bdet.push([cap,0xd6d1c7]);}}
@@ -1275,7 +1289,7 @@ const ICH_H=.24;// deck top over the highway: ~5 m clearance plus the deck
 // axes of an interchange junction: highway direction (hx,hz) and the crossing road's tiles; null if it does not fit
 function ichgInfo(J,check,compact){if(!J||!J.road||J.water||J.cv||!isJn(J))return null;const nb=roadNeighbors(J),H=nb.filter(n=>n.rt==='h'),X=nb.filter(n=>n.rt!=='h');
   if(H.length!==2||H[0].x+H[1].x!==2*J.x||H[0].z+H[1].z!==2*J.z||!X.length||X.some(n=>n.water||n.cv))return null;const hx=Math.abs(H[0].x-J.x),hz=Math.abs(H[0].z-J.z);
-  const corners=[[1,1],[1,-1],[-1,1],[-1,-1]].map(([a,b])=>T(J.x+a,J.z+b));
+  const corners=[[1,1],[1,-1],[-1,1],[-1,-1]].map(([a,b])=>T(J.x+a,J.z+b)).concat([[2,1],[2,-1],[-2,1],[-2,-1]].map(([a,b])=>T(J.x+hx*a+hz*b,J.z+hz*a+hx*b)));// + the deceleration / acceleration lane land
   // a T (crossing road on one side only): the far side gets a short stub at deck level where its slip ramps meet
   let stub=null;if(X.length===1){stub=T(2*J.x-X[0].x,2*J.z-X[0].z);if(!stub||stub.road)return null;}
   if(check)for(const c of stub?corners.concat([stub]):corners){if(!c||!owned(c)||c.road||c.b||c.ref!=null||c.rail||c.runway||c.water||c.cv||c.cvo||(c.icv&&c.icv!==key(J)))return null;}
@@ -1323,10 +1337,14 @@ function dbPath(J,X,Y,o){const I=ichgInfo(J);if(!I)return null;const ck=key(J)+'
   const pts=crSample(P,6),W=pts.map(p=>[p[0],p[1]]),H=pts.map(p=>Math.max(0,p[2])),S=[0];for(let i=1;i<W.length;i++)S.push(S[i-1]+Math.hypot(W[i][0]-W[i-1][0],W[i][1]-W[i-1][1]));
   return _dbC[ck]={W,S,L:S[S.length-1],H,ox:o2,ex:X.rt==='h'};}
 const diaH=r=>ICH_H*clamp((2.5-Math.abs(r))/2,0,1);
-const diaOff=(oh,e,hT)=>[[-1.5,oh,0],[-1.36,oh+.04,0],[-1.2,.6,.004],[-1.04,.8,hT*.18],[-.88,.98,hT*.42],[-.72,1.12,hT*.68],[-.58,DIA_T-.02,hT*.9],[-e-.04,DIA_T,hT],[-e,DIA_T,hT]];
+/* diamond ramp centre line in the ramp's frame (d along the highway, r to its right): it leaves the highway as a lane beside it
+   (RL, after a deceleration lane drawn on the tiles before), eases outward on a long S and meets the crossing road square at its
+   terminal (r = DIA_T). oh: where the car enters (its lateral offset when it reaches the junction tile). */
+const RL=.555,RW=.105;
+const diaOff=(oh,e,hT)=>{const d0=-1.42,d1=-e-.14,P=[[-1.5,oh,0]];for(const f of[0,.18,.36,.54,.72,.88,1]){const q=f*f*(3-2*f);P.push([d0+(d1-d0)*f,RL+(DIA_T-.01-RL)*q,hT*q]);}P.push([-e,DIA_T,hT]);return P;};
 function crSample(P,k){const pts=[],n=P.length;for(let i=0;i<n-1;i++){const a=P[Math.max(0,i-1)],b0=P[i],c=P[i+1],d=P[Math.min(n-1,i+2)];for(let q=0;q<k;q++){const t=q/k,t2=t*t,t3=t2*t;pts.push(b0.map((_,j)=>.5*((2*b0[j])+(-a[j]+c[j])*t+(2*a[j]-5*b0[j]+4*c[j]-d[j])*t2+(-a[j]+3*b0[j]-3*c[j]+d[j])*t3)));}}pts.push(P[n-1].slice());return pts;}
 function diaPath(J,X,Y,o){const I=ichgInfo(J);if(!I)return null;const xg=roadGeo(I.X[0]),Cc=xg.C,ox0=Math.max(.06,(rtOf(I.X[0]).lo||[.07])[0]),ck=key(J)+'|'+key(X)+'|'+key(Y)+'|'+Math.abs(o).toFixed(3);if(_diaC[ck])return _diaC[ck];
-  const ex=X.rt==='h',ox=ex?ox0:Math.min(Math.abs(o),Cc-.05),H=ex?X:Y,dx0=ex?J.x-X.x:Y.x-J.x,dz0=ex?J.z-X.z:Y.z-J.z,rx=-dz0,rz=dx0,other=ex?Y:X,side=(other.x-J.x)*rx+(other.z-J.z)*rz>0?1:-1,oh=Math.min(Math.abs(o),.45),hT=diaH(DIA_T),e=Cc+.03;
+  const ex=X.rt==='h',ox=ex?ox0:Math.min(Math.abs(o),Cc-.05),H=ex?X:Y,dx0=ex?J.x-X.x:Y.x-J.x,dz0=ex?J.z-X.z:Y.z-J.z,rx=-dz0,rz=dx0,other=ex?Y:X,side=(other.x-J.x)*rx+(other.z-J.z)*rz>0?1:-1,oh=ex?clamp(Math.abs(o),.1,.6):RL,hT=diaH(DIA_T),e=Cc+.03;
   // ramp on the right side of the highway direction: off-ramp behind the bridge, on-ramp after it
   const off=diaOff(oh,e,hT),on=off.map(([d,r,h])=>[-d,r,h]).reverse();
   let P;
@@ -1337,7 +1355,7 @@ function diaPath(J,X,Y,o){const I=ichgInfo(J);if(!I)return null;const xg=roadGeo
   const pts=[],n=P.length;for(let i=0;i<n-1;i++){const a=P[Math.max(0,i-1)],b0=P[i],c=P[i+1],d=P[Math.min(n-1,i+2)];for(let k=0;k<8;k++){const t=k/8,t2=t*t,t3=t2*t,cr=j=>.5*((2*b0[j])+(-a[j]+c[j])*t+(2*a[j]-5*b0[j]+4*c[j]-d[j])*t2+(-a[j]+3*b0[j]-3*c[j]+d[j])*t3);pts.push([cr(0),cr(1),cr(2)]);}}
   pts.push(P[n-1]);const cx=wx(J.x),cz=wx(J.z),W=[],Hh=[],S=[0];for(const[d,r,h]of pts){W.push([cx+dx0*d+rx*r,cz+dz0*d+rz*r]);Hh.push(Math.abs(d)<=Cc+.005?diaH(r):Math.max(0,h));}
   for(let i=1;i<W.length;i++)S.push(S[i-1]+Math.hypot(W[i][0]-W[i-1][0],W[i][1]-W[i-1][1]));
-  return _diaC[ck]={W,S,L:S[S.length-1],H:Hh,ox,ex,side};}
+  return _diaC[ck]={W,S,L:S[S.length-1],H:Hh,ox,ex,side,oe:ex?null:RL};}
 function connAt(Q,u){const s=clamp(u,0,1)*Q.L;let i=1;while(i<Q.S.length-1&&Q.S[i]<s)i++;const f=(s-Q.S[i-1])/Math.max(1e-6,Q.S[i]-Q.S[i-1]),A=Q.W[i-1],B=Q.W[i];
   _pp.x=A[0]+(B[0]-A[0])*f;_pp.z=A[1]+(B[1]-A[1])*f;const tx=B[0]-A[0],tz=B[1]-A[1],l=Math.hypot(tx,tz)||1;_pp.tx=tx/l;_pp.tz=tz/l;_ppH=Q.H?Q.H[i-1]+(Q.H[i]-Q.H[i-1])*f:0;return _pp;}
 const isClover=J=>J&&((J.ix==='ichg'&&!!ichgInfo(J))||(J.ix==='rbig'&&!!rbInfo(J))||(J.ix==='slip'&&!!slipInfo(J)));
@@ -1423,7 +1441,7 @@ function rbParts(J,I,out){const CY=(r0,r1,h,x,y0,z,n)=>new THREE.CylinderGeometr
 function connPath(c,p){const a=c.a;
   if(c.x2J&&c.b===c.x2J&&c.x2&&isClover(c.b)&&isRightOf(c.b,a,c.x2)){if(c._cnO==null||c._cnO0!==a){c._cnO=Math.abs(c.offC||.1);c._cnO0=a;}const Q=conPath(c.b,a,c.x2,c._cnO);if(!Q)return null;c._cl=Q.L*(CONN_SPLIT[1]-CONN_SPLIT[0]);c._clA=a;return connAt(Q,CONN_SPLIT[0]+p*(CONN_SPLIT[1]-CONN_SPLIT[0]));}
   if(isClover(a)&&c.prev&&c.b&&c.prev!==a&&isRightOf(a,c.prev,c.b)&&c._cnX===c.prev){const Q=conPath(a,c.prev,c.b,c._cnO||Math.abs(c.offC||.1));if(!Q)return null;c._cl=Q.L*(CONN_SPLIT[2]-CONN_SPLIT[1]);c._clA=a;return connAt(Q,CONN_SPLIT[1]+p*(CONN_SPLIT[2]-CONN_SPLIT[1]));}
-  if(c._cnJ&&c.prev===c._cnJ&&c._cnY===a&&isClover(c._cnJ)){const Q=conPath(c._cnJ,c._cnX,a,c._cnO||Math.abs(c.offC||.1));if(!Q)return null;c._cl=Q.L*(CONN_SPLIT[3]-CONN_SPLIT[2]);c._clA=a;c.offC=Q.ex?Q.ox:Math.min(Math.abs(c._cnO||.1),.45);return connAt(Q,CONN_SPLIT[2]+p*(CONN_SPLIT[3]-CONN_SPLIT[2]));}
+  if(c._cnJ&&c.prev===c._cnJ&&c._cnY===a&&isClover(c._cnJ)){const Q=conPath(c._cnJ,c._cnX,a,c._cnO||Math.abs(c.offC||.1));if(!Q)return null;c._cl=Q.L*(CONN_SPLIT[3]-CONN_SPLIT[2]);c._clA=a;c.offC=Q.ex?Q.ox:(Q.oe!=null?Q.oe:Math.min(Math.abs(c._cnO||.1),.45));if(Q.oe!=null&&!Q.ex)c.lane=1;return connAt(Q,CONN_SPLIT[2]+p*(CONN_SPLIT[3]-CONN_SPLIT[2]));}
   return null;}
 function ichgPath(a,prev,b,p,off){const fx=a.x-prev.x,fz=a.z-prev.z,str=b.x===a.x+fx&&b.z===a.z+fz;
   if(str){_ppH=prev.rt==='h'?0:ICH_H;return null;}
@@ -1453,19 +1471,47 @@ function ichgParts(J,I,out){const X=wx(J.x),Z=wx(J.z),ew=I.hx===1,Xr=I.X[0],xg=r
     {const A=Q(L1,-E-.01),B=Q(L1,E+.01),h=yA(L1)+.03,g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(new Float32Array([A[0],0,A[1],B[0],0,B[1],B[0],h,B[1],A[0],0,A[1],B[0],h,B[1],A[0],h,A[1]]),3));g.computeVertexNormals();D(g,0xbdb7ac);
       for(let l=-Cc+.02;l<Cc;l+=.05){const c0=Q(L1-.03,l),c1=Q(L1-.03,l+.025);D(new THREE.BoxGeometry(.012,.02,.012).translate((c0[0]+c1[0])/2,yA(L1)+.01,(c0[1]+c1[1])/2),l<0?0xd32f2f:0xf2f2f2);}}}
   // diamond ramps: one per corner; each highway direction has its off-ramp before the bridge and its on-ramp after it, both on its right
-  const DBL=J.ixv==='d';
-  for(const Hb of I.H){const dx0=J.x-Hb.x,dz0=J.z-Hb.z,rx=-dz0,rz=dx0,e=DBL?DB_R+.2:Cc+.03,off=crSample(diaOff(.44,e,diaH(DIA_T)),10),w=.1;
-    for(const ramp of[off,off.map(([d,r,h])=>[-d,r,h]).reverse()]){const L=[],Rr=[],Hs=[],Lw=[],Rw=[];
-      for(let i=0;i<ramp.length;i++){const[d,r,h]=ramp[i];if(r<.36)continue;const j0=Math.max(0,i-1),j1=Math.min(ramp.length-1,i+1),td=ramp[j1][0]-ramp[j0][0],tr=ramp[j1][1]-ramp[j0][1],l=Math.hypot(td,tr)||1,nd=-tr/l,nr=td/l;
-        const fl=DBL?1:1+.9*clamp((Math.abs(d)-(Cc+.18))/-.15,0,1),ww=w*fl,lift=Math.abs(d)<Cc+sw+.1?.0068*clamp((Cc+sw+.1-Math.abs(d))/.06,0,1):0,pt=(dd,rr)=>[X+dx0*dd+rx*rr,Z+dz0*dd+rz*rr];const rin=Math.max(r-nr*ww,.47);L.push(pt(d+nd*ww,r+nr*ww));Rr.push(pt(d-nd*ww,r-nr*ww<.47?rin:r-nr*ww));Lw.push(pt(d+nd*(ww-.012),r+nr*(ww-.012)));Rw.push(pt(d-nd*(ww-.012),r-nr*(ww-.012)));Hs.push(.012+h+(h<.003&&r<.62?.0002:.0016)+lift);}
-      if(L.length<2)continue;const tri=(A,B,col,dy=0,wall)=>{const pos=[];for(let i=0;i<A.length-1;i++){const y0=Hs[i]+dy,y1=Hs[i+1]+dy;if(wall){const b0=.012,b1=.012;pos.push(A[i][0],b0,A[i][1],A[i+1][0],b1,A[i+1][1],A[i+1][0],y1,A[i+1][1],A[i][0],b0,A[i][1],A[i+1][0],y1,A[i+1][1],A[i][0],y0,A[i][1]);}
-          else pos.push(A[i][0],y0,A[i][1],B[i][0],y0,B[i][1],B[i+1][0],y1,B[i+1][1],A[i][0],y0,A[i][1],B[i+1][0],y1,B[i+1][1],A[i+1][0],y1,A[i+1][1]);}
-        if(!pos.length)return;const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(pos),3));if(wall){g.computeVertexNormals();}else{const nr2=new Float32Array(pos.length);for(let i=1;i<nr2.length;i+=3)nr2[i]=1;g.setAttribute('normal',new THREE.BufferAttribute(nr2,3));
-          const p=g.attributes.position.array;for(let i=0;i<p.length;i+=9){const ax=p[i+3]-p[i],az=p[i+5]-p[i+2],bx=p[i+6]-p[i],bz=p[i+8]-p[i+2];if(az*bx-ax*bz<0)for(let k=0;k<3;k++){const t=p[i+3+k];p[i+3+k]=p[i+6+k];p[i+6+k]=t;}}}
-        const uv=new Float32Array(pos.length/3*2);for(let i=0;i<pos.length/3;i++){uv[i*2]=pos[i*3]*1.5;uv[i*2+1]=pos[i*3+2]*1.5;}g.setAttribute('uv',new THREE.BufferAttribute(uv,2));(wall?D:P)(g,col);};
-      tri(L,Rr,RCOL.hasp);{const cut=A=>A.filter((p,i)=>{const d=(p[0]-X)*rx+(p[1]-Z)*rz;return Math.abs(d)>.5;});const Li=L.map((p,i)=>i),inn=Li.filter(i=>Math.abs((Rw[i][0]-X)*rx+(Rw[i][1]-Z)*rz)>.48);tri(L,Lw,RCOL.wht,.0004);if(inn.length>1){const a0=inn[0],a1=inn[inn.length-1]+1,sl=A=>A.slice(a0,a1),Hs0=Hs.slice();Hs.length=0;Hs.push(...Hs0.slice(a0,a1));tri(sl(Rw),sl(Rr),RCOL.wht,.0004);Hs.length=0;Hs.push(...Hs0);}}tri(L,null,0xc4beb3,0,true);tri(Rr,null,0xc4beb3,0,true);}
-    // stop line where the off-ramp meets the crossing road
-    {const d=-(e+.02),pt=(dd,rr)=>[X+dx0*dd+rx*rr,Z+dz0*dd+rz*rr],a2=pt(d,DIA_T-w+.01),b2=pt(d-.014,DIA_T+w-.01),hy=.012+diaH(DIA_T)+.0024+.0068;P(HQ(Math.min(a2[0],b2[0]),Math.min(a2[1],b2[1]),Math.max(a2[0],b2[0]),Math.max(a2[1],b2[1]),hy),RCOL.wht);}}
+  const DBL=J.ixv==='d',hT=diaH(DIA_T),Y0=.0136,GRS=0x56683a,RAIL=0xb9bdc2,hwE=.45;
+  const slopeG=pos=>{const g=new THREE.BufferGeometry(),p=new Float32Array(pos);for(let i=0;i<p.length;i+=9){const ax=p[i+3]-p[i],az=p[i+5]-p[i+2],bx=p[i+6]-p[i],bz=p[i+8]-p[i+2];if(az*bx-ax*bz<0)for(let k=0;k<3;k++){const tt=p[i+3+k];p[i+3+k]=p[i+6+k];p[i+6+k]=tt;}}g.setAttribute('position',new THREE.BufferAttribute(p,3));g.computeVertexNormals();return g;};
+  for(const Hb of I.H){const dx0=J.x-Hb.x,dz0=J.z-Hb.z,rx=-dz0,rz=dx0,e=DBL?DB_R+.2:Cc+.03,pt=(d,r)=>[X+dx0*d+rx*r,Z+dz0*d+rz*r];
+    const CL=crSample(diaOff(RL,e,hT).slice(1),8);
+    for(const m of[1,-1]){// m=1 off-ramp before the bridge, m=-1 on-ramp after it (mirror image)
+      const S=CL.map(([d,r,h])=>[m*d,r,h]),n=S.length,A=[],B=[],HA=[],HB=[],NA=[],NB=[];
+      for(let i=0;i<n;i++){const[d,r,h]=S[i],a=S[Math.max(0,i-1)],b=S[Math.min(n-1,i+1)],td=b[0]-a[0],tr=b[1]-a[1],l=Math.hypot(td,tr)||1;let nd=-tr/l,nr=td/l;if(nr<0){nd=-nd;nr=-nr;}
+        const pA=[d+nd*RW,r+nr*RW],pB=[d-nd*RW,r-nr*RW],k=clamp((Math.abs(d)-(e+.22))/-.22,0,1);// A outer (away from the highway), B inner
+        A.push(pA);B.push(pB);HA.push(Y0+h+(diaH(pA[1])-h)*k);HB.push(Y0+h+(diaH(pB[1])-h)*k);NA.push([nd,nr]);NB.push([-nd,-nr]);}
+      const band=(P1,P2,H1,H2,col,i0=0,i1=n-1,dy=0,to=P)=>{const a=P1.map(q=>pt(q[0],q[1])),b=P2.map(q=>pt(q[0],q[1])),pos=[];for(let i=i0;i<i1;i++)pos.push(a[i][0],H1[i]+dy,a[i][1],b[i][0],H2[i]+dy,b[i][1],b[i+1][0],H2[i+1]+dy,b[i+1][1],a[i][0],H1[i]+dy,a[i][1],b[i+1][0],H2[i+1]+dy,b[i+1][1],a[i+1][0],H1[i+1]+dy,a[i+1][1]);if(pos.length)to(to===P?upGeo(pos):slopeG(pos),col);};
+      const mix=(P1,P2,t)=>P1.map((q,i)=>[q[0]+(P2[i][0]-q[0])*t,q[1]+(P2[i][1]-q[1])*t]),mixH=(H1,H2,t)=>H1.map((h,i)=>h+(H2[i]-h)*t);
+      band(A,B,HA,HB,RCOL.asp);
+      const nl=n-3;band(A,mix(A,B,.06),HA,mixH(HA,HB,.06),RCOL.wht,0,nl,.0005);band(mix(A,B,.94),B,mixH(HA,HB,.94),HB,RCOL.wht,0,nl,.0005);
+      // the last stretch reaches the crossing road's carriageway edge
+      {const[d,r]=S[n-1],dd=-m*(Cc-.004),q=[[d,r+RW],[d,r-RW],[dd,r-RW],[dd,r+RW]].map(([a,b])=>pt(a,b)),hh=[HA[n-1],HB[n-1],Y0+diaH(r-RW),Y0+diaH(r+RW)];
+        P(upGeo([q[0][0],hh[0],q[0][1],q[1][0],hh[1],q[1][1],q[2][0],hh[2],q[2][1],q[0][0],hh[0],q[0][1],q[2][0],hh[2],q[2][1],q[3][0],hh[3],q[3][1]]),RCOL.asp);
+        // rounded kerb corners into the crossing road
+        for(const sd of[1,-1]){const f=.1,K=[dd,r+sd*RW],Cn=[dd-m*f,r+sd*(RW+f)],pos=[],ar=[];for(let k=0;k<=6;k++){const th=k/6*Math.PI/2;ar.push([Cn[0]+m*f*Math.sin(th),Cn[1]-sd*f*Math.cos(th)]);}
+          for(let k=0;k<6;k++){const p0=pt(K[0],K[1]),p1=pt(ar[k][0],ar[k][1]),p2=pt(ar[k+1][0],ar[k+1][1]);pos.push(p0[0],Y0+diaH(K[1]),p0[1],p1[0],Y0+diaH(ar[k][1]),p1[1],p2[0],Y0+diaH(ar[k+1][1]),p2[1]);}P(upGeo(pos),RCOL.asp);
+          const kp=[];for(let k=0;k<6;k++){const a0=ar[k],a1=ar[k+1],o0=[a0[0]-m*.012*Math.sin(k/6*Math.PI/2),a0[1]+sd*.012*Math.cos(k/6*Math.PI/2)],o1=[a1[0]-m*.012*Math.sin((k+1)/6*Math.PI/2),a1[1]+sd*.012*Math.cos((k+1)/6*Math.PI/2)];
+            const q0=pt(a0[0],a0[1]),q1=pt(a1[0],a1[1]),w0=pt(o0[0],o0[1]),w1=pt(o1[0],o1[1]),y0=Y0+diaH(a0[1])+.006,y1=Y0+diaH(a1[1])+.006;kp.push(q0[0],y0,q0[1],q1[0],y1,q1[1],w1[0],y1,w1[1],q0[0],y0,q0[1],w1[0],y1,w1[1],w0[0],y0,w0[1]);}P(upGeo(kp),RCOL.curb);}
+        if(m>0){const a2=pt(d-.016,r-RW+.012),b2=pt(d-.002,r+RW-.012);P(HQ(Math.min(a2[0],b2[0]),Math.min(a2[1],b2[1]),Math.max(a2[0],b2[0]),Math.max(a2[1],b2[1]),Y0+hT+.0008),RCOL.wht);}}
+      // grass embankments down to the ground, steel guardrails where the ramp is up
+      for(const[E,N,H]of[[A,NA,HA],[B,NB,HB]]){const G=[],GH=[],Rl=[],Rh=[],Rl2=[];for(let i=0;i<n;i++){const[d,r]=E[i],hh=H[i]-Y0,near=clamp((Math.abs(d)-(e+.12))/.16,0,1),w=Math.min(.16,hh*1.5+.01)*near;let g=[d+N[i][0]*w,r+N[i][1]*w];if(g[1]<hwE+.02)g[1]=Math.max(g[1],Math.min(r,hwE+.02));G.push(g);GH.push(.004);Rl.push([d+N[i][0]*.006,r+N[i][1]*.006]);}
+        band(E,G,H,GH,GRS,0,n-1,-.0004,D);
+        let s0=-1;for(let i=0;i<=n;i++){const up=i<n&&H[i]-Y0>.028&&Math.abs(S[i][0])>e+.16;if(up&&s0<0)s0=i;if((!up||i===n)&&s0>=0){if(i-1>s0){const a=Rl.slice(s0,i).map(q=>pt(q[0],q[1])),hh=H.slice(s0,i),pos=[];for(let k=0;k<a.length-1;k++){const y0=hh[k]+.006,y1=hh[k+1]+.006,z0=hh[k]+.022,z1=hh[k+1]+.022;
+          pos.push(a[k][0],y0,a[k][1],a[k+1][0],y1,a[k+1][1],a[k+1][0],z1,a[k+1][1],a[k][0],y0,a[k][1],a[k+1][0],z1,a[k+1][1],a[k][0],z0,a[k][1],a[k][0],y0,a[k][1],a[k+1][0],z1,a[k+1][1],a[k+1][0],y1,a[k+1][1],a[k][0],y0,a[k][1],a[k][0],z0,a[k][1],a[k+1][0],z1,a[k+1][1]);}
+          const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(pos),3));g.computeVertexNormals();D(g,RAIL);}s0=-1;}}}
+      // deceleration / acceleration lane beside the highway, a dashed lane-drop line and the painted gore where the ramp splits off
+      {const dA=-2.55,dF=-1.95,dS=-1.42,N2=14,pos=[],ln=[],dl=[],ys=.0128;for(let k=0;k<N2;k++){const u0=dA+(dS-dA)*k/N2,u1=dA+(dS-dA)*(k+1)/N2,wt=u=>2*RW*clamp((u-dA)/(dF-dA),0,1)**1.2,q=(u,r)=>pt(m*u,r);
+          const a0=q(u0,hwE),a1=q(u1,hwE),b0=q(u0,hwE+wt(u0)),b1=q(u1,hwE+wt(u1));pos.push(a0[0],ys,a0[1],b0[0],ys,b0[1],b1[0],ys,b1[1],a0[0],ys,a0[1],b1[0],ys,b1[1],a1[0],ys,a1[1]);
+          const c0=q(u0,hwE+wt(u0)-.012),c1=q(u1,hwE+wt(u1)-.012);ln.push(c0[0],ys+.0005,c0[1],b0[0],ys+.0005,b0[1],b1[0],ys+.0005,b1[1],c0[0],ys+.0005,c0[1],b1[0],ys+.0005,b1[1],c1[0],ys+.0005,c1[1]);}
+        P(upGeo(pos),RCOL.asp);P(upGeo(ln),RCOL.wht);
+        // the highway's solid edge line becomes a dashed lane-drop line along the full-width lane
+        {const a=pt(m*dF,.432),b=pt(m*dS,.448);P(HQ(Math.min(a[0],b[0]),Math.min(a[1],b[1]),Math.max(a[0],b[0]),Math.max(a[1],b[1]),ys+.0003),RCOL.asp);
+          for(let u=dF;u<dS-.04;u+=.09){const p0=pt(m*u,.434),p1=pt(m*(u+.045),.446);P(HQ(Math.min(p0[0],p1[0]),Math.min(p0[1],p1[1]),Math.max(p0[0],p1[0]),Math.max(p0[1],p1[1]),ys+.0007),RCOL.wht);}}
+        // gore: asphalt between the highway edge and the ramp's inner edge until they are apart, white borders and chevrons
+        const gz=[],gch=[];let last=0;for(let i=0;i<n-1;i++){const r0=B[i][1],r1=B[i+1][1];if(r0-hwE>.1)break;last=i;const a0=pt(B[i][0],hwE),a1=pt(B[i+1][0],hwE),b0=pt(B[i][0],r0),b1=pt(B[i+1][0],r1),y0=HB[i]-.0004,y1=HB[i+1]-.0004;
+          gz.push(a0[0],ys,a0[1],b0[0],y0,b0[1],b1[0],y1,b1[1],a0[0],ys,a0[1],b1[0],y1,b1[1],a1[0],ys,a1[1]);}
+        if(gz.length){P(upGeo(gz),RCOL.asp);for(let i=1;i<last;i+=3){const r0=B[i][1];if(r0-hwE<.03)continue;const u=B[i][0],a0=pt(u,hwE+.008),a1=pt(u-m*.03,r0-.008);const w=.006,dx=a1[0]-a0[0],dz=a1[1]-a0[1],l=Math.hypot(dx,dz)||1,px=-dz/l*w,pz=dx/l*w;
+          gch.push(a0[0]+px,ys+.0009,a0[1]+pz,a1[0]+px,ys+.0009,a1[1]+pz,a1[0]-px,ys+.0009,a1[1]-pz,a0[0]+px,ys+.0009,a0[1]+pz,a1[0]-px,ys+.0009,a1[1]-pz,a0[0]-px,ys+.0009,a0[1]-pz);}if(gch.length)P(upGeo(gch),RCOL.wht);}}}}
   // grass on the corner land the loops use
   if(DBL){// the two terminal roundabouts, following the approach slope
     const a=ew?[0,1]:[1,0],hX=(x,z)=>.012+diaH(Math.abs((x-X)*a[0]+(z-Z)*a[1])),N=40;
@@ -2829,7 +2875,7 @@ function roundPath(a,prev,b,p,off){const cx=wx(a.x),cz=wx(a.z),ux=Math.sign(a.x-
   const l=Math.hypot(_pp.tx,_pp.tz)||1;_pp.tx/=l;_pp.tz/=l;return _pp;}
 // road surface height: bridges over water, and ramps on the land tiles leading onto them
 function surfY(t,x,z){if(_ppH!=null)return .012+_ppH;if(t.cv&&_cvS&&_cvS[0]===G.curves[t.cv])return .012+curveH(_cvS[0],_cvS[1]);if(t.water)return .142;const d=t._ramp;if(!d)return .012;return .012+rampAt(t,x,z);}
-function rampRail(t){return t.rt==='h'&&[[1,0],[-1,0],[0,1],[0,-1]].some(([a,b])=>{const q=T(t.x+a,t.z+b);return q&&q.ix==='ichg'&&ichgInfo(q);});}
+function rampRail(t){return t.rt==='h'&&[[1,0],[-1,0],[0,1],[0,-1],[2,0],[-2,0],[0,2],[0,-2]].some(([a,b])=>{const q=T(t.x+a,t.z+b);return q&&q.ix==='ichg'&&ichgInfo(q)&&(Math.abs(a)<2&&Math.abs(b)<2||T(t.x+a/2,t.z+b/2).rt==='h');});}
 function rampAt(t,x,z){const d=t._ramp;if(!d)return 0;const h0=d[2]??0,h1=d[3]??.13;return h0+(h1-h0)*clamp((x-wx(t.x))*d[0]+(z-wx(t.z))*d[1]+.5,0,1);}
 // shared stop logic for vehicles, cyclists and pedestrians at signals
 function signalStop(o,step,pStop,cautious){
@@ -2862,7 +2908,11 @@ function nextHop(c){const r0=nextHop0(c);c._clA=null;if(r0&&c.b){
     if(c.x2J!==c.a)c.x2J=null;
     if(isClover(c.b)&&c.b!==c.a){const nb=roadNeighbors(c.b).filter(n=>n!==c.a);let x=null;if(c.route&&c.route[c.ri+2]&&nb.includes(c.route[c.ri+2]))x=c.route[c.ri+2];
       else if(nb.length){const sx=c.b.x-c.a.x,sz=c.b.z-c.a.z,st=nb.find(n=>n.x-c.b.x===sx&&n.z-c.b.z===sz);x=st&&Math.random()<.6?st:nb[Math.floor(Math.random()*nb.length)];}
-      c.x2=x;c.x2J=x?c.b:null;}}
+      if(c.pre&&c.pre.J===c.b&&nb.includes(c.pre.x))x=c.pre.x;
+      c.x2=x;c.x2J=x?c.b:null;}
+    c.pre=null;if(c.a.rt==='h'&&c.b.rt==='h'){const n2=T(2*c.b.x-c.a.x,2*c.b.z-c.a.z);if(n2&&n2.ix==='ichg'&&n2.ixv!=='d'&&isClover(n2)){const nb=roadNeighbors(n2).filter(n=>n!==c.b);let x=null;
+      if(c.route){if(c.route[c.ri+3]&&nb.includes(c.route[c.ri+3]))x=c.route[c.ri+3];}else if(nb.length){const sx=c.b.x-c.a.x,sz=c.b.z-c.a.z,st=nb.find(n=>n.x-n2.x===sx&&n.z-n2.z===sz);x=st&&Math.random()<.6?st:nb[Math.floor(Math.random()*nb.length)];}
+      if(x)c.pre={J:n2,x,ex:x.rt!=='h'};}}}
   return r0;}
 function nextHop0(c){if(c.x2J&&c.x2J===c.a&&c.x2&&!c.route&&roadNeighbors(c.a).includes(c.x2)){c.b=c.x2;return true;}
   if(c.route){c.ri++;const rt=c.route;
@@ -3113,7 +3163,7 @@ function updateCars(dt){
     else if((c.a.ix==='ichg'||c.a.ix==='round')&&c.b&&c.prev&&c.b!==c.prev&&c.prev!==c.a){if(c._plA!==c.a||c._plB!==c.b){c._plA=c.a;c._plB=c.b;c._pl=c.a.ix==='ichg'?ichgLen(c.a,c.prev,c.b,c.offC):1.4;}step/=clamp(c._pl,.5,6);}
     c.p+=step;
     if(c.p>=1){c.p-=1;c.prev=c.a;c.a=c.b;c.bsK=null;c.bsT=0;c.sgK=null;c.sgT=0;if(!nextHop(c)){if(c.line)lineEnd(c,true);setCar(c,k,true);c.shown=false;c.a=null;c.route=null;continue;}}
-    let lo=laneOff(c.a,c.lane||0);if(c.emerg==='work')lo=Math.max(lo,rtOf(c.a).cw-.05);if(c.v.id==='bus'&&c.a.bs&&c.b!==c.prev&&c.bsK!==c.a)lo=Math.max(lo,rtOf(c.a).cw-.055);if(c.offC==null)c.offC=lo;c.offC+=(lo-c.offC)*Math.min(1,dt*2.6);
+    let lo=laneOff(c.a,c.lane||0);if(c.pre&&c.pre.ex&&c.a.rt==='h'&&c.b&&c.b!==c.pre.J&&roadNeighbors(c.pre.J).includes(c.b)){const u=clamp((c.p-.15)/.7,0,1);lo+=(RL-lo)*u*u*(3-2*u);}if(c.emerg==='work')lo=Math.max(lo,rtOf(c.a).cw-.05);if(c.v.id==='bus'&&c.a.bs&&c.b!==c.prev&&c.bsK!==c.a)lo=Math.max(lo,rtOf(c.a).cw-.055);if(c.offC==null)c.offC=lo;c.offC+=(lo-c.offC)*Math.min(1,dt*2.6);
     _pcar=c;const pp=pathAt(c.a,c.prev,c.b,c.p,c.offC),y=surfY(c.a,pp.x,pp.z);_pcar=null;_ppH=null;
     c.pos.set(pp.x,y,pp.z);c.yaw=Math.atan2(pp.tx,pp.tz);const d=c.a._ramp,pitch=d?-Math.atan(((d[3]??.13)-(d[2]??0))*(pp.tx*d[0]+pp.tz*d[1])):0;
     dummy.position.copy(c.pos);dummy.rotation.set(pitch,c.yaw,0,'YXZ');dummy.scale.set(1,1,1);setCar(c,k,false);dummy.rotation.order='XYZ';
@@ -3921,7 +3971,7 @@ function xOK(t,k){if(k==='junction'&&ixOpt==='ichc')return !!t&&ixOf(t)!=='ichc'
 function spend(c){if(G.mode==='sandbox')return true;if(G.money<c){toast('Not enough money');Snd.play('error');return false;}G.money-=c;return true;}
 function commit(list){
   list=list.filter(Boolean);const out=list.length;list=list.filter(owned);if(out&&!list.length){landHint();return;}if(!list.length)return;
-  if(NETCOST[tool]){const l=netFilter(list);if(!l.length){toast(tool==='buslane'?'Bus lanes go on roads':tool==='xwalk'?'Crosswalks go on straight streets or junctions with sidewalks':tool==='busstop'?'Bus stops go on straight streets with sidewalks':tool==='mstop'?'Metro stops go on a straight stretch of metro line':tool==='toll'?'Tap a straight piece of highway':tool==='junction'?(ixOpt==='ichc'?'Tap where a highway crosses or meets a street, avenue or boulevard (no extra land needed: the turning ramps fly over the junction)':ixOpt==='ichg'?'Tap where a highway crosses or meets a street, avenue or boulevard (the corner land must be clear)':ixOpt==='round'?'Roundabouts go on junctions of streets, avenues or boulevards (not highways or bridges)':(ixOpt==='slip'||ixOpt==='rbig')?ixWhy(list[0]):'Tap a junction where three or four roads meet'):tool==='roadsign'?(sgOpt==='stop'||sgOpt==='yield'?'Stop and yield signs go on a straight street right next to a junction':'Signs go on straight road tiles'):tool==='roadmark'?'Markings go on straight road tiles':XTOOLS.has(tool)?'Footbridges and underpasses go on straight streets with sidewalks':'Blocked here');Snd.play('error');return;}if(!spend(l.length*NETCOST[tool]))return;
+  if(NETCOST[tool]){const l=netFilter(list);if(!l.length){toast(tool==='buslane'?'Bus lanes go on roads':tool==='xwalk'?'Crosswalks go on straight streets or junctions with sidewalks':tool==='busstop'?'Bus stops go on straight streets with sidewalks':tool==='mstop'?'Metro stops go on a straight stretch of metro line':tool==='toll'?'Tap a straight piece of highway':tool==='junction'?(ixOpt==='ichc'?'Tap where a highway crosses or meets a street, avenue or boulevard (no extra land needed: the turning ramps fly over the junction)':ixOpt==='ichg'?'Tap where a highway crosses or meets a street, avenue or boulevard (the corner land and the tiles two along the highway on each side must be clear for the ramps)':ixOpt==='round'?'Roundabouts go on junctions of streets, avenues or boulevards (not highways or bridges)':(ixOpt==='slip'||ixOpt==='rbig')?ixWhy(list[0]):'Tap a junction where three or four roads meet'):tool==='roadsign'?(sgOpt==='stop'||sgOpt==='yield'?'Stop and yield signs go on a straight street right next to a junction':'Signs go on straight road tiles'):tool==='roadmark'?'Markings go on straight road tiles':XTOOLS.has(tool)?'Footbridges and underpasses go on straight streets with sidewalks':'Blocked here');Snd.play('error');return;}if(!spend(l.length*NETCOST[tool]))return;
     l.forEach(t=>{if(XTOOLS.has(tool)){if(tool==='mstop'){t.mst=true;netT=0;}else if(tool==='toll'){t.toll=true;}else if(tool==='junction'){t.ix=ixOpt==='sig'?null:ixOpt==='ichc'||ixOpt==='dumb'?'ichg':ixOpt;t.ixv=ixOpt==='dumb'?'d':ixOpt==='ichc'?'c':ixOpt==='slip'?((()=>{const I=slipInfo(t,true);return I&&I.free?null:'c';})()):null;for(const k in _ichC)if(k.startsWith(key(t)+'|'))delete _ichC[k];tlDirty=true;refreshIchg();for(const n of roadNeighbors(t))markDirty(n);for(const[dx,dz]of[[1,1],[1,-1],[-1,1],[-1,-1]]){const c=T(t.x+dx,t.z+dz);if(c){markDirty(c);if(t.ix==='ichg'||t.ix==='rbig'||t.ix==='slip'){c.tree=false;setTree(c);c.zone=null;}}}}else if(tool==='roadsign')t.sg=sgOpt==='none'?null:sgOpt;else if(tool==='roadmark')t.mk=mkOpt==='none'?null:mkOpt;else if(tool==='busstop')t.bs=true;else if(tool==='xwalk')t.xw=true;else t.xo=tool==='xover'?'over':'under';}else if(tool==='buslane')t.buslane=true;else{if(tool==='taxiway')t.runway='taxi';else t[tool==='metroline'?'metro':tool]=true;t.tree=false;t.zone=null;}});l.forEach(redrawAround);if(XTOOLS.has(tool))for(const t of l)for(const[dx,dz]of[[2,0],[-2,0],[0,2],[0,-2]]){const n=T(t.x+dx,t.z+dz);if(n&&n.road)markDirty(n);}if(tool==='rail'||tool==='metroline')stationsNear(l);if(tool==='roadsign'||tool==='roadmark'||tool==='junction')lampsDirty=true;if(tool!=='buslane'&&tool!=='xwalk'&&tool!=='roadsign'&&tool!=='roadmark'&&tool!=='junction')l.forEach((t,i)=>roadWork(t,i*.22));dirty=true;netT=0;Snd.play('road');}
   else if(isRoadTool(tool)){const r=roadPlan(list);if(!r.add.length&&!r.up.length){toast('Already built');return;}if(!spend(r.cost))return;const rt=ROADTOOL[tool];
     for(const t of r.add){t.road=true;t.tree=false;t.zone=null;}for(const t of r.add.concat(r.up)){t.rt=rt;t.sw=rt==='h'?'n':roadOpt.sw;t.bk=rt!=='h'&&roadOpt.bk;if(rt==='h')t.buslane=false;xFix(t);}
