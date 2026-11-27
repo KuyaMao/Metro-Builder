@@ -276,6 +276,11 @@ const SERV = {
   policehq:{name:'Police headquarters',cost:9500,up:230,size:2,r:16,cov:'police',col:0x1f3a5f,cat:'svc'},
   landfill:{name:'Landfill',cost:2800,up:60,size:2,r:15,cov:'garb',col:0x7a6a4a,cat:'svc'},
   recycle:{name:'Recycling center',cost:6500,up:120,size:2,r:17,cov:'garb',col:0x2e8b57,cat:'svc'},
+  sewage:{name:'Sewage outlet',cost:1500,up:30,size:1,r:20,cov:'sewer',col:0x6d5a3a,cat:'svc',sea:true},
+  wwtp:{name:'Wastewater treatment plant',cost:9500,up:160,size:2,r:24,cov:'sewer',col:0x4a7a8a,cat:'svc'},
+  maint:{name:'Road maintenance depot',cost:2600,up:55,size:1,r:16,cov:'roadm',col:0xf28c28,cat:'svc'},
+  post:{name:'Post office',cost:1800,up:40,size:1,r:12,cov:'post',col:0xd32f2f,cat:'svc'},
+  sorting:{name:'Post sorting facility',cost:7500,up:120,size:2,r:22,cov:'post',col:0xb71c1c,cat:'svc'},
   watertreat:{name:'Water treatment plant',cost:9000,up:150,size:2,r:19,cov:'water',col:0x3f8fb5,cat:'svc'},
   police:{name:'Police station',cost:2500,up:80,size:1,r:9,cov:'police',col:0x3c64c8,cat:'svc'},
   fire:{name:'Fire station',cost:2500,up:80,size:1,r:9,cov:'fire',col:0xc8423c,cat:'svc'},
@@ -307,9 +312,9 @@ const ITEMS = [
 const ITEM = Object.fromEntries(ITEMS.map(i=>[i.id,i]));
 const MILESTONES = [
   {pop:0,name:'Hamlet',unlock:['road','R','power','water','park','bulldoze','select','view']},
-  {pop:120,name:'Village',unlock:['C','I','landfill','police','bus','buslane','lines','plaza','playground','avenue','clinic','library','cityhall','church'],reward:8000},
-  {pop:500,name:'Town',unlock:['fire','funeral','school','metro','metroline','mstop','park2','sports','wind','boulevard','highschool','policehq','museum','mall','ferris'],reward:15000},
-  {pop:1500,name:'City',unlock:['hospital','recycle','train','rail','solar','bigpark','highway','university','watertreat','stadium','obstower','port','shipyard','ferry'],reward:30000},
+  {pop:120,name:'Village',unlock:['C','I','landfill','sewage','police','bus','buslane','lines','plaza','playground','avenue','clinic','library','cityhall','church'],reward:8000},
+  {pop:500,name:'Town',unlock:['fire','funeral','maint','post','school','metro','metroline','mstop','park2','sports','wind','boulevard','highschool','policehq','museum','mall','ferris'],reward:15000},
+  {pop:1500,name:'City',unlock:['hospital','recycle','wwtp','sorting','train','rail','solar','bigpark','highway','university','watertreat','stadium','obstower','port','shipyard','ferry'],reward:30000},
   {pop:4000,name:'Big City',unlock:['airport','runway','taxiway'],reward:60000},
   {pop:10000,name:'Metropolis',unlock:[],reward:150000},
 ];
@@ -1631,7 +1636,7 @@ function lineSide(t,k){const r={x:0,z:-1,endOn:false};if(!t||!t.b)return r;const
     const nb=netNb(n,want);r.endOn=nb.length>0&&nb.every(m=>(m.x-n.x)*dz===0&&(m.z-n.z)*dx===0);
     r.x=Math.round(dx*ca-dz*sa);r.z=Math.round(dx*sa+dz*ca);return r;}return r;}
 const ldims=b=>[b.lw||b.size||1,b.ld||b.size||1];
-const LVX={fire:1,police:1,hospital:1,funeral:1,landfill:1,recycle:1};// services whose levels add equipment and wings instead of storeys
+const LVX={fire:1,police:1,hospital:1,funeral:1,landfill:1,recycle:1,sewage:1,wwtp:1,maint:1,post:1,sorting:1};// services whose levels add equipment and wings instead of storeys
 function servParts(b){
   const P={res:[],brk:[],glass:[],ind:[],det:[],lit:[],gl:[],water:[]},S=b.size||1,H=S/2,[LW,LD]=ldims(b),HW=LW/2,HD=LD/2;
   const D=(g,c)=>P.det.push([g,c]),L=(g,c)=>P.lit.push([g,c]),GL=(g,c)=>P.gl.push([g,c]),WT=g=>P.water.push([g,0xffffff]);
@@ -1778,6 +1783,49 @@ function servParts(b){
         for(const z of[-.88,-.72]){D(CY(.05,.05,.32,.88,0,z,12),0xf2f2f2);D(new THREE.SphereGeometry(.05,12,6,0,6.3,0,1.6).translate(.88,.32,z),0xf2f2f2);}D(RB(.004,.12,.3,.82,0,-.8),0x8a9097);}
       else{const ps=asphalt(.8,.36,.45,.7);for(let i=0;i<3;i++)car(ps[i*2][0],ps[i*2][1],0,[0x5a6b7d,0xb3261e,0xd9d9d9][i],null,null);tree(.9,-.9,1);}
       flag(-.75,-.05,0xffffff);break;}
+    case 'maint':{const lv=Math.min(3,b.lv||1);
+      // depot: garage with orange doors, the trucks' yard, cones and gravel; level 2 an asphalt silo and a roller, level 3 a salt dome
+      D(RB(.98,.004,.98,0,0,0),0x9c968a);D(RB(.4,.007,.5,.22,0,.24),0x4a4d52);W('brk',.62,FLOOR*1.4,.32,-.1,0,-.3,0x8d8478);D(RB(.64,.014,.34,-.1,FLOOR*1.4,-.3),0x5a5f66);
+      for(let i=0;i<3;i++){D(RB(.15,FLOOR*1.05,.006,-.32+i*.2,0,-.138),0xf28c28);for(let k=0;k<4;k++)D(RB(.15,.003,.007,-.32+i*.2,.03+k*.04,-.137),0xc46a14);}
+      for(let i=0;i<Math.min(4,lv+1);i++)pveh('r_pickup',.08+i*.13,.24,0,0xf28c28,5.3);
+      for(let i=0;i<9;i++){const x=-.4+(i%3)*.04,z=.15+Math.floor(i/3)*.04;D(new THREE.ConeGeometry(.011,.03,8).translate(x,.015,z),0xff6d00);D(RB(.016,.003,.016,x,0,z),0x222222);}
+      D(new THREE.ConeGeometry(.1,.08,10).translate(-.32,.04,.36),0x8e8a80);D(new THREE.ConeGeometry(.07,.05,10).translate(-.18,.025,.4),0x5f5b55);
+      if(lv>=2){D(CY(.05,.05,.3,.38,.04,-.34,12),0xb0b4b8);for(const[x,z]of[[.34,-.38],[.42,-.38],[.34,-.3],[.42,-.3]])D(CY(.005,.005,.04,x,0,z,4),0x6d7378);D(new THREE.ConeGeometry(.05,.06,12).rotateX(Math.PI).translate(.38,.07,-.34),0xb0b4b8);
+        D(RB(.06,.035,.04,.42,0,.0),0xf2b705);D(CY(.02,.02,.05,.42,.02,.03,10).rotateZ(Math.PI/2),0x555555);}
+      if(lv>=3){D(new THREE.SphereGeometry(.14,16,8,0,Math.PI*2,0,Math.PI/2).scale(1,.9,1).translate(-.3,0,.0),0xd9d4c7);D(RB(.08,.07,.02,-.3,0,.13),0x6d5a3a);}
+      fence();break;}
+    case 'post':{const lv=Math.min(3,b.lv||1);
+      // post office: brick front with a counter entrance and post boxes, vans at the loading dock; level 2 a parcel-locker wall, level 3 a parcel hall
+      D(RB(.98,.004,.98,0,0,0),0xc9c3b6);D(RB(.42,.007,.38,.24,0,.25),0x4a4d52);W('brk',.56,FLOOR*1.6,.36,-.15,0,-.24,0x9a4b3a);D(RB(.58,.014,.38,-.15,FLOOR*1.6,-.24),0x5a5f66);
+      D(RB(.3,.04,.006,-.15,FLOOR*1.25,-.058),0xd32f2f);L(RB(.24,.02,.004,-.15,FLOOR*1.25+.01,-.054),0xffd23f);D(RB(.1,.11,.006,-.2,0,-.058),0x30363d);GL(RB(.12,.08,.004,-.03,.04,-.058),0x6f9bb8);
+      for(const x of[-.38,-.33])D(RB(.032,.07,.026,x,0,.02),0xd32f2f);D(RB(.24,.07,.008,.3,0,-.06),0x7a7f86);D(RB(.24,.01,.06,.3,.07,-.1),0x5a5f66);
+      for(let i=0;i<Math.min(4,lv+1);i++)pveh('c_van',.13+i*.11,.24,0,0xd32f2f,4.9);
+      if(lv>=2){D(RB(.3,.12,.03,-.25,0,.35),0xe0e0e0);for(let r=0;r<3;r++)for(let c=0;c<6;c++)D(RB(.04,.032,.004,-.37+c*.047,.01+r*.038,.367),0xd32f2f);}
+      if(lv>=3){W('ind',.24,FLOOR*1.2,.3,.36,0,-.3,0xb0b4b8);D(RB(.26,.012,.32,.36,FLOOR*1.2,-.3),0x5a5f66);}
+      flag(-.44,.42,0xd32f2f);break;}
+    case 'sorting':{const lv=Math.min(3,b.lv||1);
+      // sorting hub: a long warehouse with numbered loading docks, articulated trucks and a van park; level 2 more docks, level 3 a rooftop solar array
+      D(RB(1.96,.004,1.96,0,0,0),0xb0aca2);D(RB(1.8,.007,.7,0,0,.55),0x4a4d52);W('ind',1.5,FLOOR*2,.7,-.05,0,-.45,0xd8dde2);D(RB(1.52,.016,.72,-.05,FLOOR*2,-.45),0x9aa0a6);
+      D(RB(1.5,.04,.006,-.05,FLOOR*1.7,-.098),0xb71c1c);const nd=4+lv*2;for(let i=0;i<nd;i++){const x=-.7+i*(1.3/(nd-1));D(RB(.09,.1,.006,x,0,-.098),0x30363d);D(RB(.11,.02,.04,x,.06,-.08),0x3a3f45);}
+      for(let i=0;i<Math.min(nd,2+lv);i++)pveh('kv_truck',-.7+i*(1.3/(nd-1)),.05,Math.PI,0xf2f2f2,7)||null;
+      for(let i=0;i<4+lv*2;i++)pveh('c_van',-.8+i*.16,.72,0,0xd32f2f,4.9);
+      if(lv>=3){for(let i=0;i<6;i++)for(let k=0;k<2;k++){const g=RB(.2,.008,.14,0,0,0);g.rotateX(-.3);g.translate(-.62+i*.23,FLOOR*2+.05,-.6+k*.2);D(g,0x1d3557);}}
+      fence();break;}
+    case 'sewage':{const lv=Math.min(3,b.lv||1);
+      // pumping station on the shore, a concrete headwall and outfall pipe; the discharge stains the sea in front
+      D(RB(.98,.004,.98,0,0,0),0x9c968a);W('brk',.36,FLOOR*1.2,.3,-.2,0,-.25,0x8d8478);D(RB(.38,.014,.32,-.2,FLOOR*1.2,-.25),0x5a5f66);
+      D(RB(.5,.12,.06,0,0,.44),0xa8a49a);D(CY(.07,.07,.4,0,.06,.38,14).rotateX(Math.PI/2).translate(0,0,0),0x7a7f86);
+      for(let i=0;i<7;i++){const a=i/7*Math.PI-Math.PI/2;D(new THREE.CircleGeometry(.18+i*.05,16).rotateX(-Math.PI/2).translate(Math.sin(a)*.08*i,.004+i*.0002,.75+i*.12),0x6b5a3a);}
+      if(lv>=2){W('ind',.24,FLOOR,.22,.25,0,-.25,0xb0b4b8);D(RB(.26,.012,.24,.25,FLOOR,-.25),0x5a5f66);}
+      fence();break;}
+    case 'wwtp':{const lv=Math.min(3,b.lv||1);
+      // treatment plant: screens and grit house, aeration basins, round clarifiers (their bridges turn), sludge digesters; level 3 a biogas holder
+      D(RB(1.96,.004,1.96,0,0,0),0xb7b2a6);W('res',.4,FLOOR*1.3,.26,.62,0,.7,0xd8d2c4);D(RB(.42,.014,.28,.62,FLOOR*1.3,.7),0x5a5f66);
+      for(const[x,z]of[[-.45,-.45],[.15,-.45]]){D(CY(.27,.27,.07,x,0,z,28),0xc9c4b8);WT(new THREE.CircleGeometry(.25,28).rotateX(-Math.PI/2).translate(x,.066,z));D(CY(.03,.03,.08,x,0,z,10),0x9aa0a6);}
+      for(let i=0;i<2;i++){D(RB(.7,.06,.22,-.15,0,.05+i*.26),0xc9c4b8);D(RB(.66,.002,.18,-.15,.061,.05+i*.26),0x6a8a6a);for(let k=0;k<14;k++)D(new THREE.SphereGeometry(.008,5,4).translate(-.45+k*.046,.062,.05+i*.26+((k*7)%3-1)*.05),0xe8efe8);}
+      if(lv>=2)for(const x of[.55,.75]){D(new THREE.SphereGeometry(.09,14,10).scale(1,1.45,1).translate(x,.13,-.3),0xd0ccc2);D(CY(.02,.02,.06,x,.26,-.3,8),0x9aa0a6);}
+      if(lv>=3){D(new THREE.SphereGeometry(.16,16,10,0,Math.PI*2,0,Math.PI/2).translate(.6,0,.2),0x6f8f5a);}
+      fence();break;}
     case 'landfill':{const lv=Math.min(3,b.lv||1);
       // fenced tip: an office and weighbridge at the gate, the trucks' yard, a compactor working the active cell of the mound;
       // level 2 adds a transfer shed and a leachate pond, level 3 caps the old cells (grass, gas wells) and burns the gas in an engine house
@@ -2214,7 +2262,7 @@ function servGroup(b){const g=new THREE.Group(),P=servParts(b);for(const k in P)
     const lt=[];for(let i=0;i<24;i++){const a=i/24*Math.PI*2;lt.push([new THREE.SphereGeometry(.012,6,4).translate(Math.cos(a)*R,Math.sin(a)*R,.06),[0xff8a80,0xffe082,0x80d8ff,0xb9f6ca][i%4]]);}const lm=new THREE.Mesh(mergeG(lt,true),bLitMat);w.add(lm);}
   addSign(g,b,P);return g;}
 
-const SERVM=new Set(['landfill','recycle','funeral','cityhall','church','museum','mall','stadium','obstower','ferris','park','plaza','playground','park2','sports','bigpark','police','fire','school','hospital','clinic','library','highschool','university','policehq','watertreat','power','solar','wind','water','bus','metro','train','airport','port','shipyard','ferry']);
+const SERVM=new Set(['sewage','wwtp','maint','post','sorting','landfill','recycle','funeral','cityhall','church','museum','mall','stadium','obstower','ferris','park','plaza','playground','park2','sports','bigpark','police','fire','school','hospital','clinic','library','highschool','university','policehq','watertreat','power','solar','wind','water','bus','metro','train','airport','port','shipyard','ferry']);
 function buildMesh(t){
   const b=t.b, g=new THREE.Group();
   g.position.set(wx(t.x)+(LX(b)-1)/2,0,wx(t.z)+(LZ(b)-1)/2);
@@ -2359,7 +2407,7 @@ const hasRoad=t=>{for(const[dx,dz]of[[0,-1],[1,0],[0,1],[-1,0]]){const n=T(t.x+d
 function cap(b){if(!b.zone)return 0;const area=b.des&&b.d?desDims(b).wm*b.d.dm/(TM*TM)*(1+.15*(b.d.pod||0)):b.fp*b.fp;return Math.round(b.floors*area*(b.zone==='R'?9:b.zone==='C'?7:12));}
 function happiness(t){
   const v=cov[key(t)];let h=45;
-  for(const k of['police','fire','health','edu','transit'])if(v[k])h+=8+Math.min(4,(v[k]-1)*2);if(v.death)h+=5;if(v.garb)h+=3;if((t.b.gb||0)>60)h-=Math.round(((t.b.gb||0)-60)/4);if(v.park)h+=6+Math.min(3,v.park)*2;if(v.cleanw)h+=3*v.cleanw;if(v.landmark)h+=4+Math.min(6,v.landmark);
+  for(const k of['police','fire','health','edu','transit'])if(v[k])h+=8+Math.min(4,(v[k]-1)*2);if(v.death)h+=5;if(v.garb)h+=3;if(v.post)h+=3;if(v.water&&!v.sewer&&(stats.pop||0)>400)h-=8;if((t.b.gb||0)>60)h-=Math.round(((t.b.gb||0)-60)/4);if(v.park)h+=6+Math.min(3,v.park)*2;if(v.cleanw)h+=3*v.cleanw;if(v.landmark)h+=4+Math.min(6,v.landmark);
   if(!v.power)h-=25;if(!v.water)h-=25;if(v.poll&&t.b.zone==='R')h-=18;
   h+=(v.comfort||0)/10;h-=(G.tax-10)*2;
   return clamp(Math.round(h),0,100);
@@ -2370,9 +2418,10 @@ function tick(){if(G&&G.mode==='career'&&!G.landTip&&stats.pop>=300&&ownedCount(
   const rs=roots();
   for(const t of rs){const b=t.b;
     if(b.uc){b.riders=0;continue;}
-    if(b.zone){b.gb=Math.min(100,(b.gb||0)+(b.zone==='I'?2.4:b.zone==='C'?1.9:1.5)*(1+.25*((b.level||1)-1)));b.hap=happiness(t);const c=cap(b);if(b.zone==='R')pop+=c;else if(b.zone==='C')cj+=c;else ij+=c;hs+=b.hap*c;hn+=c;}
+    if(b.zone){if(b.zone!=='I')b.ml=Math.min(100,(b.ml||0)+1.3);b.gb=Math.min(100,(b.gb||0)+(b.zone==='I'?2.4:b.zone==='C'?1.9:1.5)*(1+.25*((b.level||1)-1)));b.hap=happiness(t);const c=cap(b);if(b.zone==='R')pop+=c;else if(b.zone==='C')cj+=c;else ij+=c;hs+=b.hap*c;hn+=c;}
     else{const s=SERV[b.kind];up+=svcUpkeep(b);if(s.cat==='tr'){const ts=terminalStats(b);b.ts=ts;shopInc+=ts.ok?ts.shops*6:0;}}
   }
+  for(const t of G.tiles)if(t.road&&!t.water)t.rc=clamp((t.rc??100)-(.03+TRAF[key(t)]*.012),0,100);
   // ridership
   for(const t of rs){const b=t.b;if(b.uc||!fleetOK(b)||!b.ts||!b.ts.ok||b.conn===false){if(b.ts||b.uc)b.riders=0;continue;}const s=SERV[b.kind];let near=0;for(const u of rs)if(u.b.zone==='R'&&Math.hypot(u.x-t.x,u.z-t.z)<s.r)near+=cap(u.b);b.riders=Math.min(b.ts.cap,Math.round(near*0.35+(b.kind==='airport'?pop*0.05:0)));riders+=b.riders;}
   const workers=pop*0.6, jobs=cj+ij, taxF=(G.tax-10)*2.5;
@@ -2382,7 +2431,7 @@ function tick(){if(G&&G.mode==='career'&&!G.landTip&&stats.pop>=300&&ownedCount(
   let tour=0,trade=0;for(const t of rs){const s=t.b.kind&&SERV[t.b.kind];if(s&&s.tour)tour+=s.tour*Math.min(3,t.b.lv||1)*(pop>200?1:.3);if(s&&s.trade)trade+=s.trade*(ij>0?Math.min(2,.5+ij/400):.3);}tour+=trade;stats.trade=trade;
   const inc=(pop*2.2+jobs*1.4)*G.tax/10+riders*0.32+shopInc+tour;
   {const tf=G.tax/10,upBy={};for(const t of rs)if(t.b.kind){const s=SERV[t.b.kind],c=s.cat==='tr'?'Transit':s.special?'Landmarks':(COVN[s.cov]||'Other');upBy[c]=(upBy[c]||0)+svcUpkeep(t.b);}
-    let rc=0,cv={power:0,water:0,police:0,fire:0,health:0,death:0,garb:0,edu:0,park:0,transit:0,poll:0},nR=0,nC=0,nI=0;
+    let rc=0,cv={power:0,water:0,sewer:0,police:0,fire:0,health:0,death:0,garb:0,post:0,edu:0,park:0,transit:0,poll:0},nR=0,nC=0,nI=0;
     for(const t of rs){const b=t.b;if(!b.zone)continue;if(b.zone==='R'){nR++;const c=cap(b),v=cov[key(t)];rc+=c;for(const k in cv)if(v[k])cv[k]+=c;}else if(b.zone==='C')nC++;else nI++;}
     stats.br={incTour:tour,incR:pop*2.2*tf,incC:cj*1.4*tf,incI:ij*1.4*tf,incT:riders*.32,incS:shopInc,upBy,cv:Object.fromEntries(Object.entries(cv).map(([k,v])=>[k,rc?Math.round(v/rc*100):0])),nR,nC,nI};}
   stats.pop=pop;stats.cj=cj;stats.ij=ij;stats.hap=hn?Math.round(hs/hn-(G.tiles.some(t=>t.toll)?Math.max(0,((G.tollFee??TOLL_FEE)-3)*.6):0)):0;stats.inc=inc;stats.exp=up;stats.riders=riders;
@@ -2654,6 +2703,8 @@ const VTYPES=[
     {id:'ambulance',n:12,sp:1.2,P:mcarP('r_ambulance',()=>passenger(MPV)),o:mcarO('r_ambulance',MPV),cols:[0xffffff]},
     {id:'firetruck',n:12,sp:1.0,P:mcarP('r_firetruck',()=>truck()),o:mcarO('r_firetruck',{L:.6,lightY:.085}),cols:[0xffffff]},
     {id:'garbage',n:20,sp:.9,P:mcarP('kv_garbage_truck',()=>truck()),o:mcarO('kv_garbage_truck',{L:.6,lightY:.085}),cols:[0xffffff]},
+    {id:'maint',n:12,sp:.95,P:mcarP('r_pickup',()=>truck()),o:mcarO('r_pickup',{L:.5,lightY:.08}),cols:[0xf28c28]},
+    {id:'mail',n:20,sp:1.0,P:mcarP('c_van',()=>passenger(MPV)),o:mcarO('c_van',MPV),cols:[0xd32f2f,0xf2f2f2]},
     {id:'hearse',n:8,sp:.95,P:mcarP('c_van',()=>passenger(MPV)),o:mcarO('c_van',MPV),cols:[0x15151a]}]:[]),
   {id:'bus',n:14,sp:.95,P:mcarP('r_bus',()=>bus()),o:mcarO('r_bus',{L:.818,lightY:.083}),cols:HASCARS?[0xffffff]:[0x1e88e5,0xd32f2f,0x2a9d8f,0xf2c14e]},
   {id:'truck',n:KV?6:8,sp:1.0,P:truck(),o:{L:.6,lightY:.085},cols:[0xb71c1c,0x1f3a5f,0xf2f2f2,0x1b7f3b,0xe67e22]},
@@ -2667,11 +2718,11 @@ const VTYPES=[
     ]:[]),
 ];
 const TRAF=new Float32Array(N*N);let TRAFt=1;
-const cars=[],TB_MAX=16,SVCV={firetruck:1,ambulance:1,police:1,hearse:1,garbage:1};let EMS_PATROL=0;
+const cars=[],TB_MAX=16,SVCV={firetruck:1,ambulance:1,police:1,hearse:1,garbage:1,maint:1,mail:1};let EMS_PATROL=0;
 // realistic proportions: motorbikes ≈ 2 m, cars 4–5.3 m, jeepneys 7 m, trucks 8.5 m, buses 12 m (all a little wider-than-life for readability)
 const VSCALE={sedan:[.87,1],taxi:[.87,1],hatch:[.87,.97],coupe:[.86,.98],suv:[.86,.95],MPV:[.87,.9],pickup:[.86,.97],jeepney:[.9,1],bus:[.9,1],truck:[.9,1],motorcycle:[.64,.64],tricycle:[.72,.72]};
 // real-world lengths in metres (1 unit = 25 m): every vehicle is scaled to its true size
-const VREAL={garbage:8.5,hearse:5.6,kvan:4.9,ksports:4.6,khatch:4.3,ksuv:4.9,kpickup:5.3,kdelivery:6.5,kdelflat:6.5,kgarbage:8.5,pickup:5.3,MPV:4.9,coupe:4.7,sedan:4.8,hatch:4.0,suv:4.8,taxi:4.8,jeep:4.3,police:4.9,ambulance:6.0,firetruck:9.5,jeepney:7.2,bus:12,truck:9,motorcycle:2.0,tricycle:2.7};
+const VREAL={maint:5.3,mail:4.9,garbage:8.5,hearse:5.6,kvan:4.9,ksports:4.6,khatch:4.3,ksuv:4.9,kpickup:5.3,kdelivery:6.5,kdelflat:6.5,kgarbage:8.5,pickup:5.3,MPV:4.9,coupe:4.7,sedan:4.8,hatch:4.0,suv:4.8,taxi:4.8,jeep:4.3,police:4.9,ambulance:6.0,firetruck:9.5,jeepney:7.2,bus:12,truck:9,motorcycle:2.0,tricycle:2.7};
 for(const v of VTYPES){let[ssx,ssl]=v.o.model?(v.id==='bus'?[.7,1]:[.92,1]):VSCALE[v.id]||[1,1];if(VREAL[v.id]){const f=VREAL[v.id]/25/(v.o.L*ssl);ssx*=f;ssl*=f;}scaleP(v.P,ssx,ssl,ssl);v.L=v.o.L*ssl;v.ly=v.o.lightY*ssl;v.fxs=(v.o.fx||(v.id==='bus'||v.id==='truck'?1.2:1))*ssx;v.meshes=[];
   for(const k in MATS){if(!v.P[k].length)continue;const m=new THREE.InstancedMesh(mergeG(v.P[k]),v.o.model&&MATS_M[k]?MATS_M[k]:MATS[k],v.n+(v.id==='bus'?TB_MAX:0));m.castShadow=(k==='paint'||k==='det');m.frustumCulled=false;scene.add(m);v.meshes.push(m);v[k]=m;}
   for(let i=0;i<v.n;i++){v.paint.setColorAt(i,new THREE.Color(v.cols[i%v.cols.length]));if(v.tail)v.tail.setColorAt(i,new THREE.Color(1,1,1));
@@ -3167,7 +3218,7 @@ function updateCars(dt){
       if(free){c.lane=ol;c.lct=3;lead=9;for(const o of onTile.get(key(c.a))||[]){if(o!==c&&o.b===c.b&&o.p>c.p&&o.lane===c.lane){const d=o.p-c.p;if(d<lead){lead=d;leadL=o.v.L;}}}}}
     if(tbuses.length&&c.pos)for(const q of tbuses){if(!(q.lz>.72)||q.px==null)continue;const dx=q.px-c.pos.x,dz=q.pz-c.pos.z;if(Math.abs(dx)>1.3||Math.abs(dz)>1.3)continue;const fx=Math.sin(c.yaw),fz=Math.cos(c.yaw),ah=dx*fx+dz*fz,la=Math.abs(dx*fz-dz*fx);if(ah>0&&ah<lead&&la<.13){lead=ah;leadL=BUSV?BUSV.L:.48;}}
     const gmin=(c.v.L+leadL)/2+.045,safe=gmin+.12+c.cur*.42;
-    let target=c.sp*rtOf(c.a).sp*clamp((lead-gmin)/(safe-gmin),0,1);
+    let target=c.sp*rtOf(c.a).sp*clamp((lead-gmin)/(safe-gmin),0,1)*((c.a.rc??100)<30?.8:1);
     // traffic signal: ease to a stop at the line
     const pStop=.8-c.v.L/2;let sigStop=false;
     if((c.emerg==='go'||c.emerg==='back')&&c.siren)target=c.sp*clamp(rtOf(c.a).sp*1.6,.75,1.9)*clamp((lead-gmin)/(safe-gmin),0,1);// sirens: a little faster, no stop at red lights
@@ -4113,7 +4164,7 @@ function renderSheet(){
     $('eClose').onclick=()=>{sheet.classList.remove('open');selT=null;};$('eDel').onclick=()=>{demolish([t],'demB');sheet.classList.remove('open');};clearTimeout(renderSheet._t);renderSheet._t=setTimeout(()=>{if(selT===t&&sheet.classList.contains('open'))renderSheet();},1000);return;}
   if(dirty||!cov)computeCoverage();
   const v=cov[key(t)];const isZ=!!b.zone;const s=SERV[b.kind];
-  const covList=['power','water','police','fire','health','death','garb','edu','park','transit'].map(k=>`<span style="color:${v[k]?'var(--good)':'var(--bad)'}">${k==='death'?'deathcare':k==='garb'?'garbage':k}</span>`).join(' · ');
+  const covList=['power','water','sewer','police','fire','health','death','garb','post','edu','park','transit'].map(k=>`<span style="color:${v[k]?'var(--good)':'var(--bad)'}">${k==='death'?'deathcare':k==='garb'?'garbage':k==='sewer'?'sewage':k}</span>`).join(' · ');
   let h=`<button class="close" id="eClose">Close</button><h2>${b.name||({R:'Residence',C:'Commerce',I:'Industry'}[b.zone]+' L'+b.level)}</h2>`;
   h+=`<div class="kv">`+(isZ?`<div><b>${cap(b)}</b><small>${b.zone==='R'?'residents':'jobs'}</small></div><div><b>${b.hap??'–'}%</b><small>happiness</small></div><div><b>${b.floors}</b><small>floors</small></div>`
     :s.cat==='tr'?(()=>{const ts=terminalStats(b),cn=termConnected(t),fo=fleetOK(b),op=ts.ok&&cn&&fo;return`<div><b style="color:${op?'var(--good)':'var(--bad)'}">${op?'Open':'Closed'}</b><small>${!cn?CONN_HINT[b.kind]:!ts.ok?'design the interior: add platforms and an entrance':!fo?'buy '+FLEET[b.kind].vs+' below':'operating'}</small></div><div><b>${ts.cap.toLocaleString()}</b><small>capacity / day</small></div><div><b>${(b.riders||0).toLocaleString()}</b><small>riders / day</small></div><div><b>${ts.comfort}</b><small>comfort</small></div>`})()
@@ -4531,15 +4582,15 @@ $('iClear').onclick=()=>{iT.b.layout=lyDecor(lyNew(iT.b.kind),iT.b.kind);iSel=nu
 const BUILD=[
   {id:'roads',label:'Roads',items:['road','avenue','boulevard','highway','junction','toll','xwalk','xover','xunder','busstop','roadsign','roadmark']},
   {id:'zones',label:'Zones',items:['R','C','I','unzone']},
-  {id:'util',label:'Utilities',items:['power','solar','wind','water','watertreat','landfill','recycle']},
-  {id:'svc',label:'Services',items:['police','policehq','fire','clinic','hospital','funeral','school','highschool','university','library']},
+  {id:'util',label:'Utilities',items:['power','solar','wind','water','watertreat','sewage','wwtp','landfill','recycle']},
+  {id:'svc',label:'Services',items:['police','policehq','fire','clinic','hospital','funeral','maint','post','sorting','school','highschool','university','library']},
   {id:'parks',label:'Parks',items:['park','plaza','playground','park2','sports','bigpark']},
   {id:'transit',label:'Transit',items:['lines','bus','buslane','metro','metroline','mstop','train','rail','airport','runway','taxiway']},
   {id:'sea',label:'Sea',items:['port','ferry','shipyard']},
   {id:'special',label:'Landmarks',items:['cityhall','church','museum','mall','ferris','obstower','stadium']},
 ];
 const DESC={road:['Street','Two lanes with sidewalks. Over the river it becomes a bridge.','#5b6168'],avenue:['Avenue','Four lanes, faster traffic. Lane markings and pedestrian crossings.','#4a5058'],boulevard:['Boulevard','Four lanes split by a tree-lined median. Looks great, moves well.','#4f7a45'],highway:['Highway','Four fast lanes with a barrier. No sidewalks and no driveways, so nothing grows beside it.','#3e5f80'],rail:['Rail track','Drag to lay track. Trains run between connected train stations. Crosses roads with level crossings.','#8d6e4a'],metroline:['Metro line','Elevated viaduct over roads and rivers. Metro trains run between connected stations.','#8d5bd6'],runway:['Runway','Straight runway of 5+ tiles touching the airport. Planes take off and land.','#5a5f66'],taxiway:['Taxiway','Link the runway to the row in front of the airport gates. Planes land, taxi in, park at the gates and taxi back out.','#c9a227'],xwalk:['Crosswalk','Zebra crossing. Tap a straight street for a mid-block crossing (cars stop for people) or a junction for crossings on every side. People only cross the street at crosswalks, bridges and tunnels.','#e0e0e0'],xover:['Footbridge','Pedestrian overpass with stairs on both sidewalks. People cross above the traffic. Straight streets only.','#64b5f6'],xunder:['Pedestrian underpass','Stairs down to a tunnel under the street. Straight streets only.','#78909c'],lines:['Transit lines','Draw bus, metro and train lines: pick a terminal or station, then the stops in order. Vehicles follow the line and show its colour.','#e53935'],mstop:['Metro stop','A small stop built right on the metro line: two side platforms, stairs and a lift. Trains stop here and it covers the streets around it. Needs a metro station with trains somewhere on the line.','#8d5bd6'],toll:['Toll plaza','A toll plaza across a highway. Every car pays a toll as it passes (it slows down at the booths).','#b8860b'],junction:['Intersection','Choose how a junction works: traffic lights, all-way stop, priority road, roundabout or no control. Tap junctions to change them.','#2f7fb5'],roadsign:['Road sign','Stop, yield, speed limits and school zones. Drivers obey them: they stop, give way and keep to the posted speed.','#d32f2f'],roadmark:['Road marking','Speed humps and SLOW markings. Drivers slow down over them.','#9e9e9e'],busstop:['Bus stop','Shelters on both sidewalks. Buses pull over here and people wait for them. Straight streets only.','#1e88e5'],buslane:['Bus lane','Paint red bus lanes on straight roads. Buses and jeepneys move faster.','#c62828'],R:['Residential','Homes. Drag an area next to a road.','#4caf50'],C:['Commercial','Shops and offices. Needs residents nearby.','#2f8fd8'],I:['Industrial','Factories and jobs. Pollutes nearby homes.','#e0a020'],unzone:['Remove zoning','Drag to clear zoning from empty lots.','#d9774a'],
-  power:'Powers every building within 16 tiles. Pollutes the area.',solar:'Clean power for 12 tiles around it.',water:'Water for buildings within 11 tiles.',park:'Paths, fountain, benches and flowers. People visit it.',plaza:'Paved square with a tiered fountain and statue.',playground:'Slide, swings, seesaw and sandbox for families.',park2:'Pond, gazebo, winding path and shady trees.',sports:'Football field, running track, stands and floodlights.',bigpark:'Lake with an island, jogging loop, pavilion and playground. Big happiness boost.',wind:'Clean power for 9 tiles. Blades turn in the wind.',police:'Safety coverage, 9 tiles. Patrol cars answer calls; level 3 adds a police helicopter.',fire:'Fire coverage, 9 tiles. Fire engines respond to fires; level 3 adds a water-bombing helicopter.',school:'Education, 10 tiles. Helps buildings level up.',landfill:'Garbage trucks empty the bins of homes and businesses within 15 tiles. Uncollected garbage piles up and upsets people.',recycle:'Garbage service for 17 tiles with less pollution; trucks sort the waste here into bales.',hospital:'Healthcare, 12 tiles. Ambulances answer calls; level 3 adds an air ambulance.',funeral:'Hearses collect the deceased from homes within 10 tiles. Covered homes are happier.',
+  power:'Powers every building within 16 tiles. Pollutes the area.',solar:'Clean power for 12 tiles around it.',water:'Water for buildings within 11 tiles.',park:'Paths, fountain, benches and flowers. People visit it.',plaza:'Paved square with a tiered fountain and statue.',playground:'Slide, swings, seesaw and sandbox for families.',park2:'Pond, gazebo, winding path and shady trees.',sports:'Football field, running track, stands and floodlights.',bigpark:'Lake with an island, jogging loop, pavilion and playground. Big happiness boost.',wind:'Clean power for 9 tiles. Blades turn in the wind.',police:'Safety coverage, 9 tiles. Patrol cars answer calls; level 3 adds a police helicopter.',fire:'Fire coverage, 9 tiles. Fire engines respond to fires; level 3 adds a water-bombing helicopter.',school:'Education, 10 tiles. Helps buildings level up.',sewage:'Takes the sewage of buildings within 20 tiles, but pollutes the sea in front of it. Must be built on the coast.',wwtp:'Cleans the sewage of buildings within 24 tiles without polluting.',maint:'Crews repair worn roads within 16 tiles; worn roads slow traffic.',post:'Mail vans deliver letters and parcels within 12 tiles; served homes and shops are happier.',sorting:'Sorts the city\'s mail; a large fleet of mail vans for 22 tiles.',landfill:'Garbage trucks empty the bins of homes and businesses within 15 tiles. Uncollected garbage piles up and upsets people.',recycle:'Garbage service for 17 tiles with less pollution; trucks sort the waste here into bales.',hospital:'Healthcare, 12 tiles. Ambulances answer calls; level 3 adds an air ambulance.',funeral:'Hearses collect the deceased from homes within 10 tiles. Covered homes are happier.',
   cityhall:'Domed civic hall with a clock, columns and a fountain plaza. Big happiness boost.',church:'Baroque stone church with a bell tower and a shaded plaza.',museum:'Stacked white galleries, a glass hall and a sculpture garden. Draws tourists.',mall:'Three-storey mall with a glass atrium and a big car park. Tourists shop here.',stadium:'Oval arena with floodlights and a full pitch. The biggest tourist draw.',obstower:'Slender tower with an observation deck and beacon lights.',ferris:'A turning Ferris wheel with coloured cabins, lit at night.',
   clinic:'Small health centre with an ambulance bay. Covers 7 tiles.',library:'Columned reading hall and garden. Education plus a little happiness.',highschool:'Classrooms, gym hall, football field and basketball court.',university:'Domed main hall, clock tower, science block, dorms and a green quad. Huge education reach.',policehq:'Big station with a helipad, atrium and patrol fleet. Covers 16 tiles.',watertreat:'Clarifier tanks and settling basins. Clean water for 19 tiles, no pollution.',
   port:'Container quay with ship-to-shore cranes. Cargo ships call here. Big boost for industry and trade income. Build it on the coast.',ferry:'Passenger terminal with a boarding gangway. Ferries berth here, load passengers and sail. Counts as public transit. Build it on the coast.',shipyard:'Dry dock with a goliath crane and a hull under construction. Jobs and trade income. Build it on the coast.',
@@ -4556,7 +4607,7 @@ const ICON={cityhall:'<path d="M20 5c4 0 7 3 7 7H13c0-4 3-7 7-7z" fill="#fff"/><
   highschool:'<path d="M4 15 20 8l16 7-16 7z" fill="#fff"/><path d="M11 19v7c4 3 14 3 18 0v-7l-9 4z" fill="#fff"/><path d="M33 16v9" stroke="#fff" stroke-width="2"/><circle cx="33" cy="27" r="2.2" fill="#fff"/>',
   university:'<path d="M5 14 20 6l15 8z" fill="#fff"/><path d="M8 16h24v2.5H8zM6 31h28v3H6z" fill="#fff"/><path d="M10.5 19v11M16.5 19v11M23.5 19v11M29.5 19v11" stroke="#fff" stroke-width="3"/>',
   policehq:'<path d="M20 5l12 4v9c0 9-5 13-12 17-7-4-12-8-12-17V9z" fill="#fff"/><path d="M20 12l2.2 4.6 5 .6-3.7 3.4 1 5-4.5-2.5-4.5 2.5 1-5-3.7-3.4 5-.6z" fill="currentColor"/>',
-  landfill:'<path d="M13 12h14l-1.5 20h-11z" fill="#fff"/><path d="M11 9h18v2.5H11zM17 6.5h6V9h-6z" fill="#fff"/>',recycle:'<path d="M20 7l5 8h-3.2l-1.8 3-3.4-6zM29.5 22l-4.3 7.5-1.6-3.3h-3.5l3.2-5.9zM10.5 22l3.4-6 3.3 5.6-1.7 3h3.6v4H13z" fill="#fff"/>',watertreat:'<path d="M20 9c4 6 6.5 9.5 6.5 13a6.5 6.5 0 0 1-13 0c0-3.5 2.5-7 6.5-13z" fill="#fff"/><path d="M7 26a14 14 0 0 0 23 4M33 14a14 14 0 0 0-23-4" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round"/><path d="M30 26v5h-5M10 14V9h5" stroke="#fff" stroke-width="2.4" fill="none"/>',
+  landfill:'<path d="M13 12h14l-1.5 20h-11z" fill="#fff"/><path d="M11 9h18v2.5H11zM17 6.5h6V9h-6z" fill="#fff"/>',recycle:'<path d="M20 7l5 8h-3.2l-1.8 3-3.4-6zM29.5 22l-4.3 7.5-1.6-3.3h-3.5l3.2-5.9zM10.5 22l3.4-6 3.3 5.6-1.7 3h3.6v4H13z" fill="#fff"/>',sewage:'<path d="M8 14h16v6H8z" fill="#fff"/><path d="M24 12h4v10h-4z" fill="#fff"/><path d="M26 25c2 3 3 5 3 6.5a3 3 0 0 1-6 0c0-1.5 1-3.5 3-6.5z" fill="#fff"/>',wwtp:'<path d="M20 8a12 12 0 1 1 0 24a12 12 0 0 1 0-24zm0 4a8 8 0 1 0 0 16a8 8 0 0 0 0-16z" fill="#fff"/><path d="M19 10h2v20h-2z" fill="#fff"/>',maint:'<path d="M20 7l8 24H12z" fill="#fff"/><path d="M15 23h10v3H15zM17 16h6v3h-6z" fill="#f28c28"/>',post:'<path d="M8 12h24v16H8z" fill="#fff"/><path d="M8 12l12 9 12-9" stroke="#d32f2f" stroke-width="2.5" fill="none"/>',sorting:'<path d="M7 16l13-7 13 7v15H7z" fill="#fff"/><path d="M12 20h16v8H12z" fill="#b71c1c"/>',watertreat:'<path d="M20 9c4 6 6.5 9.5 6.5 13a6.5 6.5 0 0 1-13 0c0-3.5 2.5-7 6.5-13z" fill="#fff"/><path d="M7 26a14 14 0 0 0 23 4M33 14a14 14 0 0 0-23-4" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round"/><path d="M30 26v5h-5M10 14V9h5" stroke="#fff" stroke-width="2.4" fill="none"/>',
   avenue:'<rect x="5" y="5" width="30" height="30" rx="3" fill="#3d4045"/><path d="M19 7v26M21 7v26" stroke="#f2d34f" stroke-width="1.4"/><path d="M12 8v5M12 17v5M12 26v5M28 8v5M28 17v5M28 26v5" stroke="#fff" stroke-width="2"/>',
   boulevard:'<rect x="5" y="5" width="30" height="30" rx="3" fill="#3d4045"/><rect x="17" y="5" width="6" height="30" fill="#6a9c4a"/><circle cx="20" cy="12" r="4" fill="#3f7a35"/><circle cx="20" cy="27" r="4" fill="#3f7a35"/><path d="M11 8v5M11 17v5M11 26v5M29 8v5M29 17v5M29 26v5" stroke="#fff" stroke-width="2"/>',
   highway:'<rect x="5" y="5" width="30" height="30" rx="3" fill="#43464b"/><rect x="18.5" y="5" width="3" height="30" fill="#d6d2c8"/><path d="M12 8v5M12 17v5M12 26v5M28 8v5M28 17v5M28 26v5" stroke="#fff" stroke-width="2"/><path d="M7 5v30M33 5v30" stroke="#fff" stroke-width="1.5"/>',
@@ -4661,7 +4712,7 @@ function openBuild(){
   bmenu.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{bTab=b.dataset.tab;openBuild();bmenu.querySelector('.bcards').scrollTop=0;});
   bmenu.querySelectorAll('[data-b]').forEach(b=>b.onclick=()=>{clearPreview();tool=b.dataset.b;cat='build';bmenu.classList.remove('open');renderCats();});
 }
-const COVN={trade:'Port & shipyard',landmark:'Landmarks',power:'Power',water:'Water',police:'Police',fire:'Fire',edu:'Education',health:'Health',death:'Deathcare',garb:'Garbage',park:'Parks',transit:'Transit'};
+const COVN={trade:'Port & shipyard',landmark:'Landmarks',power:'Power',water:'Water',police:'Police',fire:'Fire',edu:'Education',health:'Health',death:'Deathcare',garb:'Garbage',sewer:'Sewage',post:'Post',roadm:'Road upkeep',park:'Parks',transit:'Transit'};
 const LV_UP=[1,1.6,2.4];const svcUpkeep=b=>Math.round((FLEET[b.kind]?(b.fleet||0)*FLEET[b.kind].cost*.012:0)+uMod(b).up*SERV[b.kind].up*(SERV[b.kind].cat==='tr'?1:LV_UP[Math.min(3,b.lv||1)-1])*(b.fund??100)/100);
 function openBudget(){
   sheet.innerHTML=`<button class="close" id="eClose">Close</button><h2>Budget</h2>
@@ -4835,7 +4886,7 @@ const Disaster=(()=>{
   const FR=(()=>{
     const SV={fire:{v:'firetruck',kinds:['fire'],cap:(k,lv)=>lv,siren:1},police:{v:'police',kinds:['police','policehq'],cap:(k,lv)=>k==='policehq'?2+lv*2:lv+1,siren:1},
       health:{v:'ambulance',kinds:['hospital','clinic'],cap:(k,lv)=>k==='hospital'?lv+1:1,siren:1},death:{v:'hearse',kinds:['funeral'],cap:(k,lv)=>lv,siren:0},
-      garb:{v:'garbage',kinds:['landfill','recycle'],cap:(k,lv)=>1+lv,siren:0}};
+      garb:{v:'garbage',kinds:['landfill','recycle'],cap:(k,lv)=>1+lv,siren:0},roadm:{v:'maint',kinds:['maint'],cap:(k,lv)=>1+lv,siren:0},post:{v:'mail',kinds:['post','sorting'],cap:(k,lv)=>k==='sorting'?2+lv*2:lv+1,siren:0}};
     let ST=[],stT=0,sirT=0;const jobs=[],callT={police:20,health:28,death:40};
     const _p=new THREE.Vector3(),_s=new THREE.Vector3(),_q=new THREE.Quaternion(),_m=new THREE.Matrix4();
     const lot=t=>{const b=t.b,lx=b.zone?LX(b):(b.size||1),lz=b.zone?LZ(b):(b.size||1),r=[];for(let i=0;i<lx;i++)for(let j=0;j<lz;j++){const u=T(t.x+i,t.z+j);if(u)r.push(u);}return r;};
@@ -4843,8 +4894,8 @@ const Disaster=(()=>{
     const dist=(a,x,z)=>Math.hypot(wx(a.x)-x,wx(a.z)-z);
     function stations(){stT=2;ST=[];for(const t of G.tiles){const b=t.b;if(!b||b.uc||!b.kind||t.ref!=null)continue;for(const k in SV)if(SV[k].kinds.includes(b.kind))ST.push({t,svc:k,cap:SV[k].cap(b.kind,Math.min(3,b.lv||1)),out:0});}
       for(const j of jobs){const s2=ST.find(q=>q.t===j.st.t);if(s2){s2.out++;j.st=s2;}}
-      EMS_PATROL=ST.filter(q=>q.svc==='police').reduce((a,q)=>a+q.cap,0);syncHelis();ZL=G.tiles.filter(t=>t.b&&t.b.zone&&t.ref==null&&!t.b.uc&&covAt(t,'garb'));}
-    let ZL=[];
+      EMS_PATROL=ST.filter(q=>q.svc==='police').reduce((a,q)=>a+q.cap,0);syncHelis();syncSpin();ZL=G.tiles.filter(t=>t.b&&t.b.zone&&t.ref==null&&!t.b.uc&&covAt(t,'garb'));PL=G.tiles.filter(t=>t.b&&t.b.zone&&t.b.zone!=='I'&&t.ref==null&&!t.b.uc&&covAt(t,'post'));RL2=G.tiles.filter(t=>t.road&&!t.water&&!t.cv&&t.rt!=='h'&&covAt(t,'roadm'));}
+    let ZL=[],PL=[],RL2=[];
     // ---- crew figures ----
     const gBody=new THREE.CylinderGeometry(.0105,.0095,.036,7).translate(0,.05,0),gLegs=new THREE.CylinderGeometry(.0075,.0068,.034,7).translate(0,.017,0),gHead=new THREE.SphereGeometry(.0085,8,6).translate(0,.075,0),
       gHelm=new THREE.SphereGeometry(.0105,8,6,0,6.3,0,1.6).translate(0,.078,0),gCap=new THREE.CylinderGeometry(.0095,.0095,.007,8).translate(0,.083,0),gBand=new THREE.CylinderGeometry(.0108,.0108,.004,7).translate(0,.046,0);
@@ -4852,8 +4903,8 @@ const Disaster=(()=>{
     const man=(coat,legs,hat,hatC,band)=>{const g=new THREE.Group();g.add(new THREE.Mesh(gLegs,mat(legs)));g.add(new THREE.Mesh(gBody,mat(coat)));g.add(new THREE.Mesh(gHead,mat(0xd9a77c)));
       if(hat)g.add(new THREE.Mesh(hat==='helm'?gHelm:gCap,mat(hatC)));if(band)g.add(new THREE.Mesh(gBand,mat(band)));scene.add(g);return g;};
     const CREW={fire:()=>[man(0xb07a2a,0x2b2b30,'helm',0xffc400,0xe8f060),man(0xb07a2a,0x2b2b30,'helm',0xffc400,0xe8f060)],
-      health:()=>[man(0x2e7d5b,0x2e7d5b,null,0,0xe8f060),man(0x2e7d5b,0x2e7d5b,null,0,0xe8f060)],police:()=>[man(0x1f3a5f,0x1b2433,'cap',0x111a2a,null)],garb:()=>[man(0xff7a1a,0x37474f,'cap',0xff7a1a,0xe8f060),man(0xff7a1a,0x37474f,null,0,0xe8f060)],death:()=>[man(0x1c1c1f,0x1c1c1f,null,0,null),man(0x1c1c1f,0x1c1c1f,null,0,null)]};
-    const gBag=new THREE.SphereGeometry(.016,7,5).scale(1,1.2,1).translate(0,.045,0),gStr=new THREE.BoxGeometry(.03,.012,.085).translate(0,.032,0),gPat=new THREE.BoxGeometry(.026,.012,.07).translate(0,.044,0),gCas=new THREE.BoxGeometry(.03,.024,.085).translate(0,.05,0);
+      health:()=>[man(0x2e7d5b,0x2e7d5b,null,0,0xe8f060),man(0x2e7d5b,0x2e7d5b,null,0,0xe8f060)],police:()=>[man(0x1f3a5f,0x1b2433,'cap',0x111a2a,null)],garb:()=>[man(0xff7a1a,0x37474f,'cap',0xff7a1a,0xe8f060),man(0xff7a1a,0x37474f,null,0,0xe8f060)],roadm:()=>[man(0xf28c28,0x37474f,'helm',0xffffff,0xe8f060),man(0xf28c28,0x37474f,'helm',0xffffff,0xe8f060)],post:()=>[man(0x1e3a8a,0x263238,'cap',0x1e3a8a,null)],death:()=>[man(0x1c1c1f,0x1c1c1f,null,0,null),man(0x1c1c1f,0x1c1c1f,null,0,null)]};
+    const gCone=new THREE.ConeGeometry(.011,.03,8).translate(0,.015,0),gBox=new THREE.BoxGeometry(.03,.024,.03).translate(0,.06,0),gBag=new THREE.SphereGeometry(.016,7,5).scale(1,1.2,1).translate(0,.045,0),gStr=new THREE.BoxGeometry(.03,.012,.085).translate(0,.032,0),gPat=new THREE.BoxGeometry(.026,.012,.07).translate(0,.044,0),gCas=new THREE.BoxGeometry(.03,.024,.085).translate(0,.05,0);
     // ---- water spray (fire engines) ----
     const dropG=new THREE.SphereGeometry(.016,6,4),dropM=new THREE.MeshBasicMaterial({color:0xe6f4ff,transparent:true,opacity:.8,depthWrite:false});
     const mistM=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.3,depthWrite:false});
@@ -4867,8 +4918,8 @@ const Disaster=(()=>{
       const fl=Math.floor(now*7+c.i*.37)%2===0,fx=Math.sin(c.yaw),fz=Math.cos(c.yaw),rx=fz,rz=-fx,hy=c.v.ly/.42*.95+.01,lz=c.v.L*.3;
       g[0].position.set(c.pos.x+fx*lz+rx*.03,c.pos.y+hy,c.pos.z+fz*lz+rz*.03);g[1].position.set(c.pos.x+fx*lz-rx*.03,c.pos.y+hy,c.pos.z+fz*lz-rz*.03);g[0].visible=fl;g[1].visible=!fl;}}
     // ---- dispatch ----
-    function dispatch(svc,t,o={}){if(!t||!t.b||!HASCARS)return null;const V=SV[svc].v,free=cars.filter(c=>c.v.id===V&&!c.emerg&&!c.job);if(!free.length)return null;
-      const[cx,cz]=center(t),used=new Set(jobs.map(j=>j.dest)),Dn=near(t).sort((a,b)=>(used.has(a)-used.has(b))||(dist(a,cx,cz)-dist(b,cx,cz)));if(!Dn.length)return null;
+    function dispatch(svc,t,o={}){if(!t||!(t.b||t.road)||!HASCARS)return null;const V=SV[svc].v,free=cars.filter(c=>c.v.id===V&&!c.emerg&&!c.job);if(!free.length)return null;
+      const[cx,cz]=t.road?[wx(t.x),wx(t.z)]:center(t),used=new Set(jobs.map(j=>j.dest)),Dn=(t.road?[t]:near(t)).sort((a,b)=>(used.has(a)-used.has(b))||(dist(a,cx,cz)-dist(b,cx,cz)));if(!Dn.length)return null;
       const sts=ST.filter(q=>q.svc===svc&&q.out<q.cap&&q.t.b).sort((a,b)=>Math.hypot(a.t.x-t.x,a.t.z-t.z)-Math.hypot(b.t.x-t.x,b.t.z-t.z));
       for(const st of sts){const from=near(st.t);if(!from.length)continue;
         // a patrol car already on the street answers police calls from where it is
@@ -4879,8 +4930,8 @@ const Disaster=(()=>{
         c.route=rt.length>1?rt:null;c.ri=0;c.b=rt.length>1?rt[1]:(roadNeighbors(c.a)[0]||c.a);c.done=false;c.emerg='go';c.emDest=dd;c.home=from[0];c.siren=!!SV[svc].siren;
         const j={svc,c,st,t,dest:dd,arr:false,at:0,dur:o.dur||14,fire:o.fire||null,role:o.role||'call',crew:null,fx:null};c.job=j;st.out++;jobs.push(j);sirT=0;return j;}
       return null;}
-    function finish(j){const i=jobs.indexOf(j);if(i>=0)jobs.splice(i,1);clearFx(j);const c=j.c;c.job=null;if(j.t&&j.t.b){if(j.svc==='garb'){j.t.b.gbJ=null;if(j.arr)j.t.b.gb=0;}}
-      if(j.svc==='garb'&&j.arr&&c.a&&(c.load=(c.load||0)+1)<5){const nx=garbNext(c.a,j.t);if(nx){const[cx,cz]=center(nx),Dn=near(nx).sort((a,b)=>dist(a,cx,cz)-dist(b,cx,cz));for(const d of Dn){const r=route(c.a,d,30000);if(r){const j2={svc:'garb',c,st:j.st,t:nx,dest:d,arr:false,at:0,dur:7,fire:null,role:'call',crew:null,fx:null};nx.b.gbJ=1;c.job=j2;c.route=r.length>1?r:null;c.ri=0;if(r.length>1)c.b=r[1];c.done=false;c.emerg='go';c.emDest=d;jobs.push(j2);return;}}}}
+    function finish(j){const i=jobs.indexOf(j);if(i>=0)jobs.splice(i,1);clearFx(j);const c=j.c;c.job=null;if(j.t&&j.t.b){if(j.svc==='garb'){j.t.b.gbJ=null;if(j.arr)j.t.b.gb=0;}if(j.svc==='post'){j.t.b.mlJ=null;if(j.arr)j.t.b.ml=0;}}if(j.t&&j.t.road&&j.svc==='roadm'){j.t.rcJ=null;if(j.arr)j.t.rc=100;}
+      const CH=CHAIN[j.svc];if(CH&&j.arr&&c.a&&(c.load=(c.load||0)+1)<CH.max){const nx=chainNext(j.svc,c.a,j.t);if(nx){const[cx,cz]=center(nx),Dn=near(nx).sort((a,b)=>dist(a,cx,cz)-dist(b,cx,cz));for(const d of Dn){const r=route(c.a,d,30000);if(r){const j2={svc:j.svc,c,st:j.st,t:nx,dest:d,arr:false,at:0,dur:CH.dur,fire:null,role:'call',crew:null,fx:null};nx.b[CH.fj]=1;c.job=j2;c.route=r.length>1?r:null;c.ri=0;if(r.length>1)c.b=r[1];c.done=false;c.emerg='go';c.emDest=d;jobs.push(j2);return;}}}}
       c.load=0;j.st.out=Math.max(0,j.st.out-1);
       if(!c.a){c.emerg=null;return;}const r=route(c.a,c.home,30000);if(r&&r.length>1){c.emerg='back';c.emDest=c.home;c.route=r;c.ri=0;c.done=false;c.siren=j.svc==='health'&&j.role==='call';}else{c.emerg=null;c.emDest=null;c.siren=false;}}
     function clearFx(j){if(j.crew)for(const m of j.crew)scene.remove(m);j.crew=null;if(j.fx){for(const o of j.fx.objs){scene.remove(o);if(o.isInstancedMesh)o.dispose();}j.fx=null;}}
@@ -4893,12 +4944,17 @@ const Disaster=(()=>{
     // ---- crews at work ----
     function door(j){const[cx,cz]=center(j.t),S=j.t.b?Math.max(j.t.b.zone?LX(j.t.b):(j.t.b.size||1),j.t.b.zone?LZ(j.t.b):(j.t.b.size||1)):1,dx=wx(j.dest.x)-cx,dz=wx(j.dest.z)-cz,l=Math.hypot(dx,dz)||1;return[cx+dx/l*(S/2-.04),cz+dz/l*(S/2-.04)];}
     const place=(m,x,z,y,face,bob)=>{m.position.set(x,y+(bob?Math.abs(Math.sin(bob))*.004:0),z);m.rotation.y=face;m.visible=true;};
-    function work(j,dt,now){const c=j.c;if(!c.pos)return;const fx=Math.sin(c.yaw),fz=Math.cos(c.yaw),rx=fz,rz=-fx,gy=c.pos.y,[cx,cz]=center(j.t);
+    function work(j,dt,now){const c=j.c;if(!c.pos)return;const fx=Math.sin(c.yaw),fz=Math.cos(c.yaw),rx=fz,rz=-fx,gy=c.pos.y,[cx,cz]=j.t.road?[wx(j.t.x),wx(j.t.z)]:center(j.t);
       if(!j.crew){j.crew=CREW[j.svc]();if(j.svc==='health'){const st=new THREE.Mesh(gStr,mat(0xf2f2f2)),pt=new THREE.Mesh(gPat,mat(0x4f7fc2));scene.add(st);scene.add(pt);pt.visible=false;j.crew.push(st,pt);}
         if(j.svc==='death'){const cs=new THREE.Mesh(gCas,mat(0x5d3a24));scene.add(cs);cs.visible=false;j.crew.push(cs);}
-        if(j.svc==='garb'){for(let q=0;q<2;q++){const bg=new THREE.Mesh(gBag,mat(0x1f2a1f));scene.add(bg);bg.visible=false;j.crew.push(bg);}}}
+        if(j.svc==='garb'){for(let q=0;q<2;q++){const bg=new THREE.Mesh(gBag,mat(0x1f2a1f));scene.add(bg);bg.visible=false;j.crew.push(bg);}}
+        if(j.svc==='post'){const bx=new THREE.Mesh(gBox,mat(0xa1784f));scene.add(bx);bx.visible=false;j.crew.push(bx);}}
       const back=[c.pos.x-fx*(c.v.L/2+.04),c.pos.z-fz*(c.v.L/2+.04)];
       if(j.role==='fire'){fireWork(j,dt,now,c,fx,fz,gy,cx,cz);return;}
+      if(j.svc==='roadm'){// cones behind the truck, one worker on the breaker, one with a shovel
+        if(!j.cones){j.cones=[];for(let q=0;q<3;q++){const m=new THREE.Mesh(gCone,mat(0xff6d00));scene.add(m);j.cones.push(m);j.crew.push(m);}}
+        for(let q=0;q<3;q++)place(j.cones[q],c.pos.x-fx*(c.v.L/2+.08+q*.07)+rx*(q-1)*.03,c.pos.z-fz*(c.v.L/2+.08+q*.07)+rz*(q-1)*.03,gy,0);
+        const bx=back[0]-fx*.03,bz=back[1]-fz*.03;place(j.crew[0],bx+rx*.03,bz+rz*.03,gy+Math.abs(Math.sin(now*28))*.004,c.yaw+Math.PI);place(j.crew[1],bx-rx*.035,bz-rz*.035,gy,c.yaw+Math.PI+Math.sin(now*2.2)*.7);return;}
       if(j.role==='standby'){// paramedics wait by the ambulance with the stretcher; an officer directs traffic in front of the patrol car
         const m=j.crew;if(j.svc==='police'){place(m[0],c.pos.x+fx*(c.v.L/2+.06),c.pos.z+fz*(c.v.L/2+.06),gy,c.yaw+Math.PI+Math.sin(now*2)*.6);return;}
         place(m[0],back[0]+rx*.035,back[1]+rz*.035,gy,Math.atan2(cx-back[0],cz-back[1]));place(m[1],back[0]-rx*.035,back[1]-rz*.035,gy,Math.atan2(cx-back[0],cz-back[1]));
@@ -4907,7 +4963,7 @@ const Disaster=(()=>{
       const D=door(j),u=Math.min(1,j.at/j.dur),face=Math.atan2(D[0]-back[0],D[1]-back[1]),px=-Math.cos(face),pz=Math.sin(face);
       let k,out=true,carry=false;if(u<.25)k=u/.25;else if(u<.5){k=1;out=j.svc==='garb';}else if(u<.8){k=1-(u-.5)/.3;carry=true;}else{k=0;carry=true;out=u<.92;}
       const x=back[0]+(D[0]-back[0])*k,z=back[1]+(D[1]-back[1])*k,dir=u<.25?face:face+Math.PI,walk=(u<.25||(u>=.5&&u<.8))?now*11:0,m=j.crew;
-      if(j.svc==='police'){if(out)place(m[0],x,z,gy,dir,walk);else m[0].visible=false;return;}
+      if(j.svc==='police'||j.svc==='post'){if(out)place(m[0],x,z,gy,dir,walk);else m[0].visible=false;if(j.svc==='post'){const bx=m[1];bx.visible=out&&u<.25;if(bx.visible)place(bx,x,z,gy,dir);}return;}
       for(let i=0;i<2;i++){const sd=(i?-1:1)*.022;if(out)place(m[i],x+px*sd+Math.sin(dir)*(i?-.045:.045)*0,z+pz*sd,gy,dir,walk+i);else m[i].visible=false;}
       if(j.svc==='health'){const st=m[2],pt=m[3];if(out){place(st,x,z,gy,dir);st.visible=true;}else st.visible=false;pt.visible=out&&carry;if(pt.visible)place(pt,x,z,gy,dir);}
       if(j.svc==='death'){const cs=m[2];cs.visible=out&&carry;if(cs.visible)place(cs,x,z,gy,dir);}
@@ -4978,7 +5034,17 @@ const Disaster=(()=>{
         const sx=Math.cos(h.yaw)*.07,sz=-Math.sin(h.yaw)*.07;h.nl.visible=h.nr.visible=fly||night;h.nl.position.set(h.pos.x-sx,h.pos.y+.06,h.pos.z-sz);h.nr.position.set(h.pos.x+sx,h.pos.y+.06,h.pos.z+sz);
         if(h.extra)h.extra.visible=h.kind==='police'?(h.mode==='act'&&night):(h.mode==='act'||h.mode==='fly')&&!!h.fire;}
       hdrops.count=nd;hdrops.instanceMatrix.needsUpdate=true;}
-    function garbNext(from,skip){let best=null,bv=25;for(const t of ZL){if(!t.b||t===skip||t.b.gbJ)continue;if(Math.abs(t.x-from.x)+Math.abs(t.z-from.z)>7)continue;const v=(t.b.gb||0);if(v>bv){bv=v;best=t;}}return best;}
+    const CHAIN={garb:{L:()=>ZL,f:'gb',fj:'gbJ',min:25,max:5,dur:7},post:{L:()=>PL,f:'ml',fj:'mlJ',min:18,max:6,dur:5}};
+    function chainNext(svc,from,skip){const C=CHAIN[svc];let best=null,bv=C.min;for(const t of C.L()){if(!t.b||t===skip||t.b[C.fj])continue;if(Math.abs(t.x-from.x)+Math.abs(t.z-from.z)>7)continue;const v=(t.b[C.f]||0);if(v>bv){bv=v;best=t;}}return best;}
+    // worn roads: potholes; rotating clarifier bridges at treatment plants
+    const potG=new THREE.CylinderGeometry(.02,.022,.001,9),potM=new THREE.MeshStandardMaterial({color:0x1d1f22,roughness:.9}),potI=new THREE.InstancedMesh(potG,potM,1500);potI.count=0;potI.frustumCulled=false;scene.add(potI);
+    function potUpdate(){let n=0;for(const t of G.tiles){if(!t.road||t.water||t.cv||t.rt==='h'||(t.rc??100)>=40||n>=1500)continue;const h=((t.x*73856093)^(t.z*19349663))>>>0,k=t.rc<15?3:t.rc<28?2:1,C=roadGeo(t).C;
+      for(let i=0;i<k&&n<1500;i++,n++){const a=((h>>(i*5))&31)/31-.5,bq=((h>>(i*5+3))&31)/31-.5;_p.set(wx(t.x)+a*.7,.0128,wx(t.z)+bq*Math.min(.7,C*1.6));_s.set(.7+((h>>i)&3)*.25,1,.6+((h>>(i+2))&3)*.2);_m.compose(_p,_q,_s);potI.setMatrixAt(n,_m);}}
+      potI.count=n;potI.instanceMatrix.needsUpdate=true;}
+    const spins=new Map(),brG=new THREE.BoxGeometry(.5,.012,.03),brM=new THREE.MeshStandardMaterial({color:0x9aa0a6,metalness:.5,roughness:.4});
+    function syncSpin(){const want=new Set();for(const t of G.tiles){if(!t.b||t.b.kind!=='wwtp'||t.ref!=null)continue;const k=key(t);want.add(k);if(spins.has(k))continue;const r=t.b.rot||0,cx=wx(t.x)+.5,cz=wx(t.z)+.5,c=Math.cos(r),sn=Math.sin(r),arr=[];
+      for(const[lx,lz]of[[-.45,-.45],[.15,-.45]]){const m=new THREE.Mesh(brG,brM);m.position.set(cx+lx*c+lz*sn,.085,cz-lx*sn+lz*c);scene.add(m);arr.push(m);}spins.set(k,arr);}
+      for(const[k,arr]of spins)if(!want.has(k)){arr.forEach(m=>scene.remove(m));spins.delete(k);}}
     // ---- uncollected garbage: bags piled at the kerb in front of full buildings ----
     const bagG=new THREE.SphereGeometry(.018,6,5).scale(1,1.15,1),bagM=new THREE.MeshStandardMaterial({color:0x23271f,roughness:.35,metalness:.05}),NB=900,bags=new THREE.InstancedMesh(bagG,bagM,NB);bags.count=0;bags.frustumCulled=false;scene.add(bags);let bagT=0;const _c=new THREE.Color();
     function bagUpdate(){let n=0;for(const t of G.tiles){const b=t.b;if(!b||!b.zone||t.ref!=null||(b.gb||0)<55)continue;const S2=Math.max(LX(b),LZ(b)),[cx,cz]=center(t),r=b.rot||0,fx=Math.sin(r),fz=Math.cos(r),k=Math.min(6,Math.floor(((b.gb||0)-50)/8)+1);
@@ -4986,6 +5052,9 @@ const Disaster=(()=>{
       bags.count=n;bags.instanceMatrix.needsUpdate=true;}
     // ---- random calls ----
     function calls(dt){if(!G)return;const pf=clamp(900/((stats.pop||0)+300),.35,2.4);
+      for(const[svc,L,f,fj,mn,dur]of[['post',PL,'ml','mlJ',30,5],['roadm',RL2,'rc','rcJ',-1,10]]){callT[svc]=(callT[svc]||5)-dt;if(callT[svc]>0)continue;callT[svc]=rnd(3,6)*Math.min(1.5,pf);const fs=ST.filter(q=>q.svc===svc&&q.out<q.cap);if(!fs.length)continue;
+        let best=null,bv=-1e9;for(const t of L){const v=svc==='roadm'?100-(t.rc??100):(t.b&&t.b[f])||0;if(svc==='roadm'?(v<58||t.rcJ):(!t.b||t.b[fj]||v<mn))continue;let dm=1e9;for(const q of fs)dm=Math.min(dm,Math.abs(q.t.x-t.x)+Math.abs(q.t.z-t.z));const sc=v/12-dm;if(sc>bv){bv=sc;best=t;}}
+        if(best){const j=dispatch(svc,best,{role:'call',dur});if(j){if(svc==='roadm')best.rcJ=1;else best.b[fj]=1;}}}
       callT.garb=(callT.garb||4)-dt;if(callT.garb<=0){callT.garb=rnd(2.5,5)*Math.min(1.5,pf);if(ST.some(q=>q.svc==='garb'&&q.out<q.cap)){let best=null,bv=-1e9;const fs=ST.filter(q=>q.svc==='garb'&&q.out<q.cap);for(const t of ZL){if(!t.b||t.b.gbJ||(t.b.gb||0)<35)continue;let dm=1e9;for(const q of fs)dm=Math.min(dm,Math.abs(q.t.x-t.x)+Math.abs(q.t.z-t.z));const sc=t.b.gb/12-dm;if(sc>bv){bv=sc;best=t;}}
         if(best){const j=dispatch('garb',best,{role:'call',dur:7});if(j)best.b.gbJ=1;}}}
       if((stats.pop||0)<60)return;
@@ -4993,7 +5062,7 @@ const Disaster=(()=>{
         if(!ST.some(q=>q.svc===svc&&q.out<q.cap))continue;const cand=[];for(let i=0;i<40;i++){const t=G.tiles[Math.floor(Math.random()*G.tiles.length)];if(t&&t.b&&t.b.zone&&t.ref==null&&(svc==='police'||t.b.zone==='R')&&covAt(t,svc)){cand.push(t);if(cand.length>2)break;}}
         if(!cand.length)continue;const t=cand[0],j=dispatch(svc,t,{role:'call',dur:svc==='death'?20:svc==='health'?18:14});
         if(j){const[cx,cz]=center(t);if(svc==='health'&&(Math.random()<.35)){heliCall('health',t,{dest:j.dest,wait:10});}if(svc==='police'&&Math.random()<.3)heliCall('police',t,{wait:16});}}}
-    function update(dt,now,rdt){stT-=rdt;if(stT<=0&&G)stations();calls(dt);bagT-=rdt;if(bagT<=0&&G){bagT=2;bagUpdate();}
+    function update(dt,now,rdt){stT-=rdt;if(stT<=0&&G)stations();calls(dt);bagT-=rdt;if(bagT<=0&&G){bagT=2;bagUpdate();potUpdate();}for(const arr of spins.values())for(const m of arr)m.rotation.y+=rdt*.25;
       for(const j of jobs.slice()){const c=j.c;if(c.job!==j||(!c.emerg)){finish(j);continue;}if(c.emerg==='work'){j.arr=true;j.at+=dt;work(j,dt,now);}
         if(j.fire?fires.indexOf(j.fire)<0:(j.arr&&j.at>j.dur))finish(j);}
       lights(now);heliUpdate(dt,rdt,now);
@@ -5246,7 +5315,7 @@ function renderPop(){const el=$('stpop'),br=stats.br||{upBy:{},cv:{}},h=G.hist||
     <h5>Population history</h5>${spark(h.p,'#7ee081',v=>Math.round(v).toLocaleString())}`;}
   else if(popK==='hap'){const c=br.cv||{};
     html=`<h4>Happiness</h4><div class="pbig">${stats.pop?stats.hap+'%':'–'}<small>${stats.hap>=70?'Citizens love it here':stats.hap>=50?'Mostly content':stats.pop?'Unhappy, check the gaps below':'No residents yet'}</small></div>
-    <h5>Homes with service</h5>${bar('Power',c.power||0,'#ffd23f')}${bar('Water',c.water||0,'#4fb3ff')}${bar('Police',c.police||0,'#5c7cbf')}${bar('Fire',c.fire||0,'#ff7043')}${bar('Health',c.health||0,'#ef5350')}${bar('Deathcare',c.death||0,'#9575cd')}${bar('Garbage',c.garb||0,'#8d9f5a')}${bar('Education',c.edu||0,'#ab47bc')}${bar('Parks',c.park||0,'#66bb6a')}${bar('Transit',c.transit||0,'#26c6da')}${bar('Polluted',c.poll||0,'#8d6e63')}
+    <h5>Homes with service</h5>${bar('Power',c.power||0,'#ffd23f')}${bar('Water',c.water||0,'#4fb3ff')}${bar('Police',c.police||0,'#5c7cbf')}${bar('Fire',c.fire||0,'#ff7043')}${bar('Health',c.health||0,'#ef5350')}${bar('Deathcare',c.death||0,'#9575cd')}${bar('Garbage',c.garb||0,'#8d9f5a')}${bar('Sewage',c.sewer||0,'#8d6e4b')}${bar('Post',c.post||0,'#e57373')}${bar('Education',c.edu||0,'#ab47bc')}${bar('Parks',c.park||0,'#66bb6a')}${bar('Transit',c.transit||0,'#26c6da')}${bar('Polluted',c.poll||0,'#8d6e63')}
     <h5>Happiness history</h5>${spark(h.h,'#ff8a65',v=>Math.round(v)+'%')}<small class="phint">Taxes above 10% lower happiness (now ${G.tax}%)</small>`;}
   el.innerHTML=html;}
 function showPop(k,anchor,pin){popK=k;popPin=!!pin;renderPop();const el=$('stpop'),r=anchor.getBoundingClientRect();el.classList.add('show');
