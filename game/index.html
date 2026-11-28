@@ -865,6 +865,9 @@ function mkParts(b,k){const P={res:[],brk:[],glass:[],ind:[],det:[],lit:[]},br=M
 /* Kenney City Kit buildings (CC0, kenney.nl): suburban houses, commercial blocks and skyscrapers, industrial sheds.
    1 kit unit = 10 m. Setting kenMode: off | mix (about half the lots) | all (every zoned lot, one model per tile). */
 let kenMode=(()=>{try{return localStorage.getItem('metrob_kenney2')||'off';}catch(e){return 'off';}})();
+// the Kenney kit ships as a JSON string and is parsed only when it is used (faster start-up)
+function kenLoad(){if(window.KENPACK_SRC&&window.MODELPACK){try{Object.assign(MODELPACK,JSON.parse(window.KENPACK_SRC));}catch(e){}window.KENPACK_SRC=null;}}
+if(kenMode!=='off')kenLoad();
 const kWinC=c=>{const r=parseInt(c.slice(0,2),16),g=parseInt(c.slice(2,4),16),b=parseInt(c.slice(4,6),16);return b>=170&&b-r>=50&&b-g>=20;};
 const kWinMat=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.25,metalness:.35,emissive:0x8a6c40,emissiveIntensity:0});winMats.push(kWinMat);
 const KEN_U=.4,_kl={},KEN_ROOF={R:[0x9c4a36,0x7a3b2e,0x3f4a55,0x5a5f66,0xa67c52,0x5f7f9a,0x58b888],C:[0x4a525c,0x3f4a55,0x6b5d52,0x58b888],I:[0x6e7f8a,0x8a7f6e,0x5a5f66,0x9aa0a6]};
@@ -1580,9 +1583,9 @@ function ichgParts(J,I,out){const X=wx(J.x),Z=wx(J.z),ew=I.hx===1,Xr=I.X[0],xg=r
             for(let u=KL_DF;u<KL_DS-.04;u+=.09){const p0=q(u,.434),p1=q(u+.045,.446);P(HQ(Math.min(p0[0],p1[0]),Math.min(p0[1],p1[1]),Math.max(p0[0],p1[0]),Math.max(p0[1],p1[1]),ys+.0007),RCOL.wht);}}
           ja=jb=Math.max(j0,S.findIndex(p2=>A2(p2[0])>=KL_DS-.002)-2);}
         let jg=jb;
-        while(jg<j1&&ri(jg)-hwE<.15)jg++;
+        while(jg<j1&&ri(jg)-hwE<.3)jg++;
         // taper: asphalt from the highway edge out to the ramp's outer edge, the highway edge line dashed across it
-        band(at(Eo,hwE-.014),Eo,HH,HH,RCOL.asp,ja,jb,0);band(at(Eo,hwE-.002),at(Eo,hwE+.008),HH,HH,RCOL.wht,ja,jb,.0006,null,i=>(i>>1)%2===0);
+        band(at(Eo,hwE-.014),Eo,HH,HH,RCOL.asp,ja,jb,0);if(jb>ja){const i=jb,q=[[Eo[i][0],hwE-.014],Eo[i],Ei[i],[Ei[i][0],hwE-.014]].map(v=>pt(v[0],v[1])),y=HH[i];P(upGeo([q[0][0],y,q[0][1],q[1][0],y,q[1][1],q[2][0],y,q[2][1],q[0][0],y,q[0][1],q[2][0],y,q[2][1],q[3][0],y,q[3][1]]),RCOL.asp);}band(at(Eo,hwE-.002),at(Eo,hwE+.008),HH,HH,RCOL.wht,ja,jb,.0006,null,i=>(i>>1)%2===0);
         // the ramp itself and the gore (asphalt between the highway edge and the ramp's inner edge) with its white border and chevrons
         band(A,B,HH,HH,RCOL.asp,jb,j1,0);band(at(Ei,hwE-.014),Ei,HH,HH,RCOL.asp,jb,jg,-.0003);band(at(Ei,hwE-.002),at(Ei,hwE+.008),HH,HH,RCOL.wht,jb,jg,.0006);
         for(let i=jb+4;i<jg-1;i+=3){if(ri(i)-hwE<.05)continue;const u=Ei[i],a=pt(u[0],hwE+.008),b=pt(Ei[Math.max(jb,i-2)][0],u[1]-.006),dx=b[0]-a[0],dz=b[1]-a[1],l=Math.hypot(dx,dz)||1,w=.005,px=-dz/l*w,pz=dx/l*w,y=HH[i]+.0008;P(upGeo([a[0]+px,y,a[1]+pz,b[0]+px,y,b[1]+pz,b[0]-px,y,b[1]-pz,a[0]+px,y,a[1]+pz,b[0]-px,y,b[1]-pz,a[0]-px,y,a[1]-pz]),RCOL.wht);}
@@ -4972,7 +4975,7 @@ function openSettings(){sheet.dataset.k='';
   for(const[id,k]of[['vM','m'],['vMu','mu'],['vS','s']]){$(id).oninput=e=>{Snd.vol[k]=e.target.value/100;Snd.apply();};$(id).onchange=()=>Snd.save();}
   if($('tF'))$('tF').oninput=e=>{if(G){G.tollFee=+e.target.value;$('tfV').textContent='$'+G.tollFee;}};
   if($('tlG')){$('tlG').oninput=e=>{if(G){G.tlg=+e.target.value;$('tlgV').textContent=G.tlg+' s';}};$('tlA').oninput=e=>{if(G){G.tla=+e.target.value;$('tlaV').textContent=G.tla+' s';}};}
-  sheet.querySelectorAll('[data-ken]').forEach(b=>b.onclick=()=>{kenMode=b.dataset.ken;try{localStorage.setItem('metrob_kenney2',kenMode);}catch(e){}for(const C of chunks)C.dirty=true;dirty=true;openSettings();});sheet.querySelectorAll('[data-gq]').forEach(b=>b.onclick=()=>{gfxQ=b.dataset.gq;try{localStorage.setItem('metrob_gfx',gfxQ);}catch(e){}applyGfx();openSettings();});if($('gDof'))$('gDof').onclick=()=>{POST.dof=!POST.dof;try{localStorage.setItem('metrob_dof',POST.dof?'1':'0');}catch(e){}openSettings();};
+  sheet.querySelectorAll('[data-ken]').forEach(b=>b.onclick=()=>{kenMode=b.dataset.ken;if(kenMode!=='off')kenLoad();try{localStorage.setItem('metrob_kenney2',kenMode);}catch(e){}for(const C of chunks)C.dirty=true;dirty=true;openSettings();});sheet.querySelectorAll('[data-gq]').forEach(b=>b.onclick=()=>{gfxQ=b.dataset.gq;try{localStorage.setItem('metrob_gfx',gfxQ);}catch(e){}applyGfx();openSettings();});if($('gDof'))$('gDof').onclick=()=>{POST.dof=!POST.dof;try{localStorage.setItem('metrob_dof',POST.dof?'1':'0');}catch(e){}openSettings();};
   sheet.querySelectorAll('[data-dis]').forEach(b=>b.onclick=()=>{Disaster.mode=b.dataset.dis;openSettings();});sheet.querySelectorAll('[data-dnow]').forEach(b=>b.onclick=()=>{sheet.classList.remove('open');Disaster.start(b.dataset.dnow);});
   sheet.querySelectorAll('[data-wx]').forEach(b=>b.onclick=()=>{weatherMode=b.dataset.wx;try{localStorage.setItem('metrob_weather2',weatherMode);}catch(e){}if(weatherMode==='real')RealWx.refresh();openSettings();});
   const setCF=m=>{confirmMode=m;try{localStorage.setItem('metrob_confirm',m);}catch(e){}openSettings();};$('cfT').onclick=()=>setCF('touch');$('cfA').onclick=()=>setCF('always');$('cfN').onclick=()=>setCF('never');
