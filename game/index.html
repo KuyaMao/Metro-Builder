@@ -372,8 +372,8 @@ function genTile(x,z){const rx=OFF+48*.78+Math.sin((z-OFF)*.16)*3.5,lx=x-OFF+24,
 function newGame(mode){
   G = {mode, money: mode==='sandbox'?1e9:60000, day:0, tax:10, tiles:[], unlocked:new Set(), ms:0, seed:Math.random(), own:defaultOwn(), curves:{}};
   for(let z=0;z<N;z++)for(let x=0;x<N;x++)G.tiles.push(genTile(x,z));
-  // the highway-like avenue crosses the whole map: it is the city's link to the outside
-  for(let x=0;x<N;x++){const t=T(x,Math.floor(N/2));t.road=true;t.tree=false;t.rt='a';t.sw='b';}
+  // an expressway crosses the whole map: it is the city's link to the outside (connect streets to it, then add an interchange)
+  for(let x=0;x<N;x++){const t=T(x,Math.floor(N/2));t.road=true;t.tree=false;t.rt='h';t.sw='n';t.bk=false;}
   syncUnlocks();
 }
 function defaultOwn(){const o=new Array(NP*NP).fill(0);START_OWN.forEach(i=>o[i]=1);return o;}
@@ -383,7 +383,7 @@ const ownedCount=()=>G.own.reduce((a,b)=>a+b,0);
 function plotBuyable(i){if(G.own[i])return false;const px=i%NP,pz=Math.floor(i/NP);return[[1,0],[-1,0],[0,1],[0,-1]].some(([dx,dz])=>{const x=px+dx,z=pz+dz;return x>=0&&z>=0&&x<NP&&z<NP&&G.own[z*NP+x];});}
 const plotPrice=()=>15000+8000*Math.max(0,ownedCount()-START_OWN.length);
 function plotInfo(i){const px=i%NP,pz=Math.floor(i/NP);let w=0,tr=0,rd=0;for(let z=pz*PLOT;z<pz*PLOT+PLOT;z++)for(let x=px*PLOT;x<px*PLOT+PLOT;x++){const t=T(x,z);if(t.water)w++;else if(t.road)rd++;else if(t.tree)tr++;}
-  const f=[];if(w>40){let rows=0;for(let z=pz*PLOT;z<pz*PLOT+PLOT;z++){let r=0;for(let x=px*PLOT;x<px*PLOT+PLOT;x++)if(T(x,z).water)r=1;rows+=r;}f.push(rows>=PLOT-2?'River':'Lake');}f.push(tr>PLOT*PLOT*.3?'Forest':tr>PLOT*PLOT*.16?'Woodland':'Open land');if(rd)f.push('Avenue to the outside');return{feat:f,water:w};}
+  const f=[];if(w>40){let rows=0;for(let z=pz*PLOT;z<pz*PLOT+PLOT;z++){let r=0;for(let x=px*PLOT;x<px*PLOT+PLOT;x++)if(T(x,z).water)r=1;rows+=r;}f.push(rows>=PLOT-2?'River':'Lake');}f.push(tr>PLOT*PLOT*.3?'Forest':tr>PLOT*PLOT*.16?'Woodland':'Open land');if(rd)f.push('Expressway to the outside');return{feat:f,water:w};}
 function syncUnlocks(){if(G.mode==='sandbox'){Object.keys(SERV).concat(['road','avenue','boulevard','highway','R','C','I','bulldoze','select','view','rail','metroline','runway','taxiway','buslane','xwalk','xover','xunder','busstop','roadsign','roadmark','mstop','lines','junction','toll']).forEach(k=>G.unlocked.add(k));return;}
   for(let i=0;i<=G.ms&&i<MILESTONES.length;i++)MILESTONES[i].unlock.forEach(k=>G.unlocked.add(k));['xwalk','xover','xunder','busstop','roadsign','roadmark','lines','junction','toll'].forEach(k=>G.unlocked.add(k));}
 const T = (x,z)=> (x<0||z<0||x>=N||z>=N)?null:G.tiles[z*N+x];
@@ -633,6 +633,8 @@ function facadeSet(kind,bg){const K=kind==='brk'?'res':kind,R=bg?1024:512,R0=512
   const tx=(cv,srgb)=>{const t=new THREE.CanvasTexture(cv);t.colorSpace=srgb?THREE.SRGBColorSpace:THREE.NoColorSpace;t.anisotropy=8;t.wrapS=t.wrapT=THREE.RepeatWrapping;return t;};
   return{map:tx(col,true),emi:tx(lit,true),rough:tx(rough,false),normal:tx(nrm,false)};}
 const WALL={};
+{const cvn=THREE.BufferGeometry.prototype.computeVertexNormals;THREE.BufferGeometry.prototype.computeVertexNormals=function(){cvn.call(this);fixNormals(this);};}
+function fixNormals(g){const n=g&&g.attributes&&g.attributes.normal;if(!n)return g;const a=n.array;for(let i=0;i<a.length;i+=3){const x=a[i],y=a[i+1],z=a[i+2],l=x*x+y*y+z*z;if(!(l>1e-10)){a[i]=0;a[i+1]=1;a[i+2]=0;}}n.needsUpdate=true;return g;}
 for(const k of['res','brk','glass','ind']){const F=facadeSet(k),m=new THREE.MeshStandardMaterial({vertexColors:true,map:F.map,emissive:0xffffff,emissiveMap:F.emi,emissiveIntensity:0,roughness:1,roughnessMap:F.rough,normalMap:F.normal,normalScale:new THREE.Vector2(.9,.9),metalness:k==='glass'?.35:.05});WALL[k]=m;winMats.push(m);}
 const bDetMat=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.82});
 /* ---------- material texture pack (texpack.js): realistic surfaces, swapped in once decoded ---------- */
@@ -1642,6 +1644,8 @@ function lineSide(t,k){const r={x:0,z:-1,endOn:false};if(!t||!t.b)return r;const
     const nb=netNb(n,want);r.endOn=nb.length>0&&nb.every(m=>(m.x-n.x)*dz===0&&(m.z-n.z)*dx===0);
     r.x=Math.round(dx*ca-dz*sa);r.z=Math.round(dx*sa+dz*ca);return r;}return r;}
 const ldims=b=>[b.lw||b.size||1,b.ld||b.size||1];
+/* gate in the front fence of services with vehicles: [local x of its centre, width] (front = +z, the side facing the road) */
+const SGATE={police:[.18,.3],funeral:[.27,.22],cemetery:[0,.24],landfill:[.62,.32],recycle:[.6,.34],maint:[.22,.4],post:[.24,.42],sorting:[0,.7],prison:[0,.2]};
 const LVX={gasplant:1,radiomast:1,telecom:1,cemetery:1,prison:1,college:1,fire:1,police:1,hospital:1,funeral:1,landfill:1,recycle:1,sewage:1,wwtp:1,maint:1,post:1,sorting:1};// services whose levels add equipment and wings instead of storeys
 function servParts(b){
   const P={res:[],brk:[],glass:[],ind:[],det:[],lit:[],gl:[],water:[]},S=b.size||1,H=S/2,[LW,LD]=ldims(b),HW=LW/2,HD=LD/2;
@@ -1659,7 +1663,9 @@ function servParts(b){
   const flowers=(x,z,w,d)=>{D(RB(w,.018,d,x,0,z),0x6b4a2f);const cs=[0xe53935,0xfdd835,0x8e24aa,0xff7043,0xffffff];for(let i=0;i<Math.max(3,Math.round(w*d*600));i++){const fx=x+(((i*37)%100)/100-.5)*w*.85,fz=z+(((i*61)%100)/100-.5)*d*.85;D(new THREE.IcosahedronGeometry(.012,0).translate(fx,.026,fz),cs[i%5]);}};
   const fountain=(x,z,r)=>{D(CY(r,r*1.05,.03,x,0,z,20),0xd6d1c7);WT(new THREE.CylinderGeometry(r*.9,r*.9,.004,20).translate(x,.03,z));D(CY(r*.25,r*.3,.06,x,.03,z,12),0xd6d1c7);D(CY(r*.45,r*.4,.012,x,.09,z,16),0xd6d1c7);WT(new THREE.CylinderGeometry(r*.4,r*.4,.003,16).translate(x,.1,z));WT(new THREE.CylinderGeometry(.006,.012,.08,6).translate(x,.14,z));};
   const lawn=(c=0x6fae55)=>{D(RB(S*.98,.012,S*.98,0,0,0),c);D(RB(S*.98,.016,.02,0,0,H-.02),0xbdb7aa);D(RB(S*.98,.016,.02,0,0,-H+.02),0xbdb7aa);D(RB(.02,.016,S*.98,H-.02,0,0),0xbdb7aa);D(RB(.02,.016,S*.98,-H+.02,0,0),0xbdb7aa);};
-  const fence=(c=0x8a9097,h=.07)=>{const e=H-.015;for(const s of[-1,1]){D(RB(S*.97,h*.15,.006,0,h*.85,s*e),c);D(RB(.006,h*.15,S*.97,s*e,h*.85,0),c);}for(let i=0;i<=S*8;i++){const t=-e+i*(2*e)/(S*8);for(const s of[-1,1]){D(RB(.006,h,.006,t,0,s*e),c);D(RB(.006,h,.006,s*e,0,t),c);}}};
+  const fence=(c=0x8a9097,h=.07,gate=SGATE[b.kind])=>{const e=H-.015,g0=gate?gate[0]-gate[1]/2:9,g1=gate?gate[0]+gate[1]/2:9;
+    for(const s of[-1,1]){if(s>0&&gate){if(g0>-e)D(RB(g0+e,h*.15,.006,(g0-e)/2,h*.85,e),c);if(g1<e)D(RB(e-g1,h*.15,.006,(g1+e)/2,h*.85,e),c);for(const x of[g0,g1])D(RB(.014,h*1.15,.014,x,0,e),0x5a5f66);}else D(RB(S*.97,h*.15,.006,0,h*.85,s*e),c);D(RB(.006,h*.15,S*.97,s*e,h*.85,0),c);}
+    for(let i=0;i<=S*8;i++){const t=-e+i*(2*e)/(S*8);for(const s of[-1,1]){if(!(s>0&&gate&&t>g0-.004&&t<g1+.004))D(RB(.006,h,.006,t,0,s*e),c);D(RB(.006,h,.006,s*e,0,t),c);}}};
   const car=(x,z,r,body,stripe,bar)=>{const K=.64;const g=[[new THREE.BoxGeometry(.15,.045,.3).translate(0,.04,0),body],[new THREE.BoxGeometry(.13,.04,.15).translate(0,.08,-.02),body],[new THREE.BoxGeometry(.135,.03,.155).translate(0,.083,-.02),0x1d2a35]];
     if(stripe)g.push([new THREE.BoxGeometry(.152,.012,.3).translate(0,.045,0),stripe]);for(const[gg,c]of g)D(gg.scale(K,K,K).rotateY(r).translate(x,0,z),c);
     for(const sx of[-1,1])for(const sz of[-1,1])D(new THREE.CylinderGeometry(.028,.028,.02,10).rotateZ(Math.PI/2).translate(sx*.07,.028,sz*.09).scale(K,K,K).rotateY(r).translate(x,0,z),0x151515);
@@ -1671,6 +1677,7 @@ function servParts(b){
     for(const rz of rows){for(let i=0;i<=n;i++)D(RB(.006,.007,.22,x-w/2+.015+i*p,0,rz),0xe8e8e8);D(RB(w-.03,.007,.006,x,0,rz-.11),0xe8e8e8);for(let i=0;i<n;i++)st.push([x-w/2+.015+(i+.5)*p,rz]);}return st;};
   // a parked vehicle from the car models (paint tinted), real length in metres; falls back to false when the model pack is missing
   const pveh=(k,x,z,r,col,len,y=0)=>{const M=window.MODELPACK&&MODELPACK[k];if(!M||!M.g[0].k)return false;const bb=M.b,cx=(bb[0]+bb[3])/2,cz=(bb[2]+bb[5])/2,s=len/25/(bb[5]-bb[2]),C=new THREE.Color(col);
+    {const hl=len/50,hw=(bb[3]-bb[0])*s/2,ex=Math.abs(Math.sin(r))*hl+Math.abs(Math.cos(r))*hw,ez=Math.abs(Math.cos(r))*hl+Math.abs(Math.sin(r))*hw,lim=H-.035;x=clamp(x,-lim+ex,lim-ex);z=clamp(z,-lim+ez,lim-ez);}
     const gry=c=>{const r=c>>16,g=(c>>8)&255,b2=c&255;return Math.max(r,g,b2)-Math.min(r,g,b2)<24;},pm=Math.max(1,...M.g.filter(g=>g.k==='paint'&&gry(parseInt(g.c,16))).map(g=>{const c=parseInt(g.c,16);return Math.max(c>>16,(c>>8)&255,c&255);}));
     for(const g of M.g){const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(g.p,3));geo.translate(-cx,-bb[1],-cz);geo.scale(s,s,s);geo.rotateY(r);geo.translate(x,y,z);geo.computeVertexNormals();
       let c=parseInt(g.c,16);if(g.k==='paint'&&gry(c)){const f=(c>>16)/pm;c=new THREE.Color().copy(C).multiplyScalar(Math.min(1,f*1.02)).getHex();}else if(g.k==='paint'&&col!==0xffffff){}
@@ -1816,17 +1823,17 @@ function servParts(b){
       // lawn cemetery: paths, rows of headstones under trees, a small chapel; level 2 a mausoleum and more rows, level 3 a columbarium and memorial garden
       D(RB(1.96,.012,1.96,0,0,0),0x5f8f45);D(RB(.12,.014,1.9,0,0,0),0xd8d2c4);D(RB(1.9,.014,.1,0,0,.1),0xd8d2c4);
       const rows=4+lv*2;for(let r=0;r<rows;r++)for(let c=0;c<7;c++)for(const sd of[-1,1]){const x=sd*(.16+c*.11),z=-.85+r*(1.65/rows)+(r*(1.65/rows)>.9?.1:0);if(Math.abs(z-.1)<.08)continue;const h=.03+((r*7+c*3)%3)*.008;D(RB(.04,h,.012,x,.012,z),[0xb8b4ac,0x9a968e,0xd0ccc4][(r+c)%3]);D(RB(.044,.004,.05,x,.012,z+.03),0x4f7a3a);}
-      W('res',.24,FLOOR*1.3,.18,-.7,0,.72,0xe9dfcc);D(gable(.26,.2,.1,-.7,FLOOR*1.3,.72),0x4b4f58);for(let i=0;i<6;i++)tree(.85,-.85+i*.33,.8,i%2===0);
+      W('res',.24,FLOOR*1.3,.18,-.7,0,.72,0xe9dfcc);D(gable(.26,.2,.1,-.7,FLOOR*1.3,.72),0x4b4f58);for(let i=0;i<6;i++)tree(.85,-.85+i*.33,.8,i%2===0);fence(0x2b2b2b,.06);
       if(lv>=2){D(RB(.2,.12,.14,.65,.012,.72),0xc9c4b8);D(gable(.22,.16,.06,.65,.13,.72),0x9a968e);}
       if(lv>=3){for(let i=0;i<2;i++){D(RB(.4,.12,.03,-.5,.012,-.6+i*.2),0xb0aca4);for(let r=0;r<3;r++)for(let c=0;c<8;c++)D(RB(.04,.028,.004,-.67+c*.05,.025+r*.032,-.584+i*.2),0x8d8a84);}WT(RB(.2,.004,.12,.5,.016,-.6));}
       break;}
     case 'prison':{const lv=Math.min(3,b.lv||1);
       // high walls with watchtowers, cell blocks around an exercise yard, a sally port; levels add cell blocks and a workshop
-      D(RB(1.96,.004,1.96,0,0,0),0xa8a396);for(const s2 of[-1,1]){D(RB(1.9,.16,.03,0,0,s2*.93),0xc9c4b8);D(RB(.03,.16,1.9,s2*.93,0,0),0xc9c4b8);}
+      D(RB(1.96,.004,1.96,0,0,0),0xa8a396);D(RB(1.9,.16,.03,0,0,-.93),0xc9c4b8);for(const s2 of[-1,1]){D(RB(.85,.16,.03,s2*.525,0,.93),0xc9c4b8);D(RB(.03,.16,1.9,s2*.93,0,0),0xc9c4b8);D(RB(.04,.2,.05,s2*.11,0,.93),0x9a968e);}D(RB(.26,.04,.05,0,.16,.93),0x9a968e);D(RB(.2,.006,.12,0,.002,.86),0x6d7378);
       for(const[x,z]of[[-.9,-.9],[.9,-.9],[-.9,.9],[.9,.9]]){D(RB(.1,.32,.1,x,0,z),0xb0aca2);D(RB(.14,.06,.14,x,.32,z),0x5a5f66);GL(RB(.12,.04,.12,x,.28,z),0x6f9bb8);}
       const blocks=[[-.45,-.45],[.45,-.45],[-.45,.25],[.45,.25]].slice(0,1+lv);for(const[x,z]of blocks){W('res',.55,FLOOR*2,.28,x,0,z,0xb8b4ac);D(RB(.57,.014,.3,x,FLOOR*2,z),0x6d7378);}
       D(RB(.5,.006,.4,0,.004,-.05),0x8a8f86);D(RB(.3,.006,.18,0,.006,-.05),0x5d7a3a);W('res',.3,FLOOR*1.3,.2,.0,0,.72,0x8d8478);D(RB(.18,.12,.006,0,0,.93),0x37474f);
-      for(let i=0;i<2;i++)pveh('c_van',-.12+i*.24,.82,0,0x37474f,5.2);break;}
+      for(let i=0;i<2;i++)pveh('c_van',-.3+i*.6,.74,0,0x37474f,5.2);break;}
     case 'college':{const lv=Math.min(3,b.lv||1);
       // campus: a columned main hall facing a quad, paths and trees, a parking lot; level 2 a science block, level 3 a library and dorm
       D(RB(1.96,.004,1.96,0,0,0),0xc9c3b6);D(RB(1.4,.012,.8,0,0,.15),0x6fae55);D(RB(.1,.013,.8,0,0,.15),0xd8d2c4);D(RB(1.4,.013,.08,0,0,.15),0xd8d2c4);
@@ -1854,7 +1861,7 @@ function servParts(b){
       for(let i=0;i<Math.min(4,lv+1);i++)pveh('c_van',.13+i*.11,.24,0,0xd32f2f,4.9);
       if(lv>=2){D(RB(.3,.12,.03,-.25,0,.35),0xe0e0e0);for(let r=0;r<3;r++)for(let c=0;c<6;c++)D(RB(.04,.032,.004,-.37+c*.047,.01+r*.038,.367),0xd32f2f);}
       if(lv>=3){W('ind',.24,FLOOR*1.2,.3,.36,0,-.3,0xb0b4b8);D(RB(.26,.012,.32,.36,FLOOR*1.2,-.3),0x5a5f66);}
-      flag(-.44,.42,0xd32f2f);break;}
+      flag(-.44,.42,0xd32f2f);fence();break;}
     case 'sorting':{const lv=Math.min(3,b.lv||1);
       // sorting hub: a long warehouse with numbered loading docks, articulated trucks and a van park; level 2 more docks, level 3 a rooftop solar array
       D(RB(1.96,.004,1.96,0,0,0),0xb0aca2);D(RB(1.8,.007,.7,0,0,.55),0x4a4d52);W('ind',1.5,FLOOR*2,.7,-.05,0,-.45,0xd8dde2);D(RB(1.52,.016,.72,-.05,FLOOR*2,-.45),0x9aa0a6);
@@ -1893,7 +1900,7 @@ function servParts(b){
       if(lv>=3){D(mound.clone().scale(.42,hm*.75,.36).translate(-.52,.02,-.5),0x6b7a45);for(const[x,z]of[[-.6,-.55],[-.45,-.4],[-.7,-.38]])D(CY(.006,.006,.05,x,hm*.72,z,6),0x9aa0a6);
         W('ind',.26,FLOOR*1.1,.18,-.62,0,.3,0x9aa0a6);D(RB(.28,.012,.2,-.62,FLOOR*1.1,.3),0x5a5f66);for(const x of[-.7,-.54])D(CY(.012,.014,.28,x,FLOOR*1.1,.28,8),0x8a9097);D(CY(.035,.035,.12,-.35,0,.3,12),0xe0e0e0);}
       for(const s2 of[-1,1])for(let i=0;i<9;i++)D(RB(.006,.08,.006,s2*.97,0,-.95+i*.24),0x8a9097);for(let i=0;i<8;i++)D(RB(.006,.08,.006,-.95+i*.24,0,-.97),0x8a9097);
-      for(const s2 of[-1,1])D(RB(.006,.012,1.92,s2*.97,.07,0),0x9aa0a6);D(RB(1.92,.012,.006,0,.07,-.97),0x9aa0a6);for(let i=0;i<4;i++)tree(-.9+i*.22,.9,.8);
+      fence();for(let i=0;i<3;i++)tree(-.9+i*.22,.86,.8);
       break;}
     case 'recycle':{const lv=Math.min(3,b.lv||1);
       // material recovery facility: tipping hall, a conveyor up to the sorting line, bales of paper, plastic, glass and metal in the yard;
@@ -1916,7 +1923,7 @@ function servParts(b){
       D(RB(.2,.012,.26,.27,.14,.0),0x4b4f58);for(const[x,z]of[[.19,-.11],[.35,-.11],[.19,.11],[.35,.11]])D(CY(.007,.008,.14,x,0,z,6),0xf2efe8);
       pveh('c_van',.27,.02,0,0x15151a,5.6);
       for(let i=0;i<5;i++)D(RB(.07,.045,.045,-.42+i*.075,0,.455),0x2f5d2a);for(let i=0;i<3;i++)D(RB(.045,.045,.07,.44,0,-.4+i*.08),0x2f5d2a);
-      tree(-.4,-.4,.9,true);tree(.4,.42,.7);D(RB(.16,.05,.02,-.38,0,.36),0x8d8a84);L(RB(.13,.02,.004,-.38,.025,.371),0xf2efe8);lamp(.12,.42,.26);
+      tree(-.4,-.4,.9,true);tree(.43,-.12,.7);fence(0x2b2b2b,.055);D(RB(.16,.05,.02,-.38,0,.36),0x8d8a84);L(RB(.13,.02,.004,-.38,.025,.371),0xf2efe8);lamp(.12,.42,.26);
       if(lv>=2){W('brk',.2,FLOOR*1.1,.22,.27,0,-.33,0x9a6a55);D(RB(.22,.012,.24,.27,FLOOR*1.1,-.33),0x4b4f58);D(CY(.025,.03,.42,.34,0,-.4,10),0x7a3b2e);D(CY(.032,.032,.02,.34,.42,-.4,10),0x5a5f66);
         pveh('c_van',.27,.34,0,0x15151a,5.6);D(RB(.08,.05,.06,-.4,0,.2),0xf4ede0);D(RB(.1,.006,.08,-.4,.05,.2),0x6d4c41);const fc=[0xe53935,0xfdd835,0xffffff,0x8e24aa];for(let k=0;k<6;k++)D(new THREE.IcosahedronGeometry(.01,0).translate(-.43+(k%3)*.03,.058,.18+Math.floor(k/3)*.03),fc[k%4]);}
       if(lv>=3){for(const z of[-.46,-.3]){D(RB(.26,.1,.03,-.3,0,z),0xb0aca4);for(let r=0;r<3;r++)for(let c=0;c<6;c++)D(RB(.03,.022,.004,-.41+c*.044,.015+r*.028,z+.016),0x8d8a84);}
@@ -2304,7 +2311,7 @@ function disposeSigns(g){if(!g)return;g.traverse(o=>{if(o.userData&&o.userData.s
 const windH=b=>uOpt(b,'tall')==='tall'?1.7:1.3;
 function servGroup(b){const g=new THREE.Group(),P=servParts(b);for(const k in P)for(const[gg]of P[k])gg.computeBoundingBox();
   const add=(k,mt,sh)=>{if(!P[k].length)return;const m=new THREE.Mesh(mergeG(P[k],true),mt);m.castShadow=sh;m.receiveShadow=true;g.add(m);};
-  add('res',WALL.res,true);add('ind',WALL.ind,true);add('det',bDetMat,true);add('gl',bGlassMat,true);add('lit',bLitMat,false);add('water',waterMatS,false);
+  add('res',WALL.res,true);add('brk',WALL.brk,true);add('glass',WALL.glass,true);add('ind',WALL.ind,true);add('det',bDetMat,true);add('gl',bGlassMat,true);add('lit',bLitMat,false);add('water',waterMatS,false);
   if(b.kind==='wind'){const th=windH(b),bs=uOpt(b,'blade')==='long'?1.28:1;const r=new THREE.Mesh(mergeG([[new THREE.SphereGeometry(.028,8,6),0xf2f2f2],...[0,1,2].map(i=>[new THREE.BoxGeometry(.04,.62,.012).translate(0,.33,0).rotateZ(i*Math.PI*2/3),0xf7f7f7])]),bDetMat);
     r.position.set(0,th+.04,.11);r.scale.setScalar(bs);r.castShadow=true;g.add(r);rotors.push(r);r.userData.sp=1.4+Math.random()*.5;}
   if(b.kind==='ferris'){const R=.78,parts=[[new THREE.TorusGeometry(R,.014,6,48),0xeceff1],[new THREE.TorusGeometry(R*.96,.008,6,48).translate(0,0,.05),0xeceff1],[new THREE.TorusGeometry(R*.96,.008,6,48).translate(0,0,-.05),0xeceff1],[new THREE.CylinderGeometry(.05,.05,.14,12).rotateX(Math.PI/2),0xe53935]];
@@ -2515,6 +2522,7 @@ function mergeG(parts,lin){let nv=0;const gs=[];for(const[g0,c]of parts){const g
   const pos=new Float32Array(nv*3),nor=new Float32Array(nv*3),col=new Float32Array(nv*3),uv=new Float32Array(nv*2);let o=0;const cc=new THREE.Color();
   for(const[g,c]of gs){const p=g.attributes.position.array,n=g.attributes.normal.array,u=g.attributes.uv?g.attributes.uv.array:null;cc.set(c==null?0xffffff:c);if(lin)cc.convertSRGBToLinear();const cnt=g.attributes.position.count;
     pos.set(p,o*3);nor.set(n,o*3);if(u)uv.set(u,o*2);if(c==null&&g.attributes.color)col.set(g.attributes.color.array,o*3);else for(let i=0;i<cnt;i++){col[(o+i)*3]=cc.r;col[(o+i)*3+1]=cc.g;col[(o+i)*3+2]=cc.b;}o+=cnt;}
+  for(let i=0;i<nor.length;i+=3){const l=nor[i]*nor[i]+nor[i+1]*nor[i+1]+nor[i+2]*nor[i+2];if(!(l>1e-10)){nor[i]=0;nor[i+1]=1;nor[i+2]=0;}}
   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(pos,3));g.setAttribute('normal',new THREE.BufferAttribute(nor,3));g.setAttribute('color',new THREE.BufferAttribute(col,3));g.setAttribute('uv',new THREE.BufferAttribute(uv,2));return g;}
 const BX=(w,h,d,x,y,z)=>new THREE.BoxGeometry(w,h,d).translate(x,y,z);
 const cylX=(r,h,s)=>new THREE.CylinderGeometry(r,r,h,s).rotateZ(Math.PI/2);
@@ -2771,7 +2779,7 @@ const VTYPES=[
     {id:'kdelflat',n:3,sp:1.0,P:mcarP('kv_delivery_flat'),o:mcarO('kv_delivery_flat'),cols:[0xd84315,0x37474f,0xf2f2f2]},
     ]:[]),
 ];
-const TRAF=new Float32Array(N*N);let TRAFt=1;
+const TRAF=new Float32Array(N*N);let TRAFt=1,NFt=.5;
 const cars=[],TB_MAX=16,SVCV={firetruck:1,ambulance:1,police:1,hearse:1,garbage:1,maint:1,mail:1,pvan:1};let EMS_PATROL=0;
 // realistic proportions: motorbikes ≈ 2 m, cars 4–5.3 m, jeepneys 7 m, trucks 8.5 m, buses 12 m (all a little wider-than-life for readability)
 const VSCALE={sedan:[.87,1],taxi:[.87,1],hatch:[.87,.97],coupe:[.86,.98],suv:[.86,.95],MPV:[.87,.9],pickup:[.86,.97],jeepney:[.9,1],bus:[.9,1],truck:[.9,1],motorcycle:[.64,.64],tricycle:[.72,.72]};
@@ -2847,7 +2855,7 @@ const FURN={manhole:mergeG([[new THREE.CylinderGeometry(.017,.017,.0012,14),0x55
   planter:mergeG([[BX(.06,.026,.06,0,.013,0),0x9b968c],[BX(.052,.004,.052,0,.026,0),0x4b3a2a],[new THREE.IcosahedronGeometry(.03,1).scale(1,.75,1).translate(0,.045,0),0x3f7a35],[new THREE.IcosahedronGeometry(.012,0).translate(.015,.06,.01),0xd94f6a],[new THREE.IcosahedronGeometry(.01,0).translate(-.016,.058,-.008),0xf2c94c]])};
 for(const k in FURN)FURN[k].scale(.55,.55,.55);   // true size: a 1.8 m bench, a 0.8 m bin
 const FURNMAX=4000,furnM={};for(const k in FURN){const m=new THREE.InstancedMesh(FURN[k],detMat,FURNMAX);m.count=0;m.castShadow=true;m.receiveShadow=true;scene.add(m);furnM[k]=m;}
-const DRIVE_K=new Set(['bus','train','metro','airport','ferry','port','fire','police','hospital']);
+const DRIVE_K=new Set(['bus','train','metro','airport','ferry','port','fire','police','policehq','hospital','clinic','funeral','cemetery','landfill','recycle','maint','post','sorting','prison']);
 function nextToTerm(t){for(const[dx,dz]of DIRS4){const n=T(t.x+dx,t.z+dz);if(!n)continue;const r=n.b?n:n.ref!=null?G.tiles[n.ref]:null;if(r&&r.b&&DRIVE_K.has(r.b.kind))return true;}return false;}
 let lineEd=null,lineSel=null;const lineGrp=new THREE.Group();lineGrp.renderOrder=5;scene.add(lineGrp);
 function lineValid(t,k,first){const r=t.b?t:t.ref!=null?G.tiles[t.ref]:null;
@@ -3309,6 +3317,7 @@ function updateCars(dt){
     c.pos.set(pp.x,y,pp.z);c.yaw=Math.atan2(pp.tx,pp.tz);const d=c.a._ramp,pitch=d?-Math.atan(((d[3]??.13)-(d[2]??0))*(pp.tx*d[0]+pp.tz*d[1])):0;
     dummy.position.copy(c.pos);dummy.rotation.set(pitch,c.yaw,0,'YXZ');dummy.scale.set(1,1,1);setCar(c,k,false);dummy.rotation.order='XYZ';
   }
+  NFt-=dt;if(NFt<=0){NFt=3;scene.traverse(o=>{const g=o.geometry;if(g&&g.attributes&&g.attributes.normal&&!g.userData.nf){g.userData.nf=1;fixNormals(g);}});}
   TRAFt-=dt;if(TRAFt<=0){TRAFt=1;for(let i=0;i<TRAF.length;i++)TRAF[i]*=.85;if(OVL[ovI]==='traffic')updateOverlay();}
   updateTermBuses(dt);
   for(const v of VTYPES){for(const m of v.meshes){m.count=v.cnt;m.instanceMatrix.needsUpdate=true;}if(v.paint.instanceColor)v.paint.instanceColor.needsUpdate=true;if(v.tail&&v.tail.instanceColor)v.tail.instanceColor.needsUpdate=true;}
@@ -4946,7 +4955,7 @@ const Disaster=(()=>{
     const lot=t=>{const b=t.b,lx=b.zone?LX(b):(b.size||1),lz=b.zone?LZ(b):(b.size||1),r=[];for(let i=0;i<lx;i++)for(let j=0;j<lz;j++){const u=T(t.x+i,t.z+j);if(u)r.push(u);}return r;};
     const near=t=>{const S=new Set();for(const u of lot(t))for(const[dx,dz]of[[0,-1],[1,0],[0,1],[-1,0]]){const n=T(u.x+dx,u.z+dz);if(n&&n.road&&!n.water&&n.rt!=='h'&&roadNeighbors(n).length)S.add(n);}return[...S];};
     const dist=(a,x,z)=>Math.hypot(wx(a.x)-x,wx(a.z)-z);
-    function stations(){stT=2;ST=[];for(const t of G.tiles){const b=t.b;if(!b||b.uc||!b.kind||t.ref!=null)continue;for(const k in SV)if(SV[k].kinds.includes(b.kind))ST.push({t,svc:k,cap:SV[k].cap(b.kind,Math.min(3,b.lv||1)),out:0});}
+    function stations(){stT=2;ST=[];syncGates();for(const t of G.tiles){const b=t.b;if(!b||b.uc||!b.kind||t.ref!=null)continue;for(const k in SV)if(SV[k].kinds.includes(b.kind))ST.push({t,svc:k,cap:SV[k].cap(b.kind,Math.min(3,b.lv||1)),out:0});}
       for(const j of jobs){const s2=ST.find(q=>q.t===j.st.t);if(s2){s2.out++;j.st=s2;}}
       EMS_PATROL=ST.filter(q=>q.svc==='police').reduce((a,q)=>a+q.cap,0);syncHelis();syncSpin();ZL=G.tiles.filter(t=>t.b&&t.b.zone&&t.ref==null&&!t.b.uc&&covAt(t,'garb'));PL=G.tiles.filter(t=>t.b&&t.b.zone&&t.b.zone!=='I'&&t.ref==null&&!t.b.uc&&covAt(t,'post'));RL2=G.tiles.filter(t=>t.road&&!t.water&&!t.cv&&t.rt!=='h'&&covAt(t,'roadm'));}
     let ZL=[],PL=[],RL2=[];
@@ -4975,7 +4984,7 @@ const Disaster=(()=>{
     function dispatch(svc,t,o={}){if(!t||!(t.b||t.road)||!HASCARS)return null;const V=SV[svc].v,free=cars.filter(c=>c.v.id===V&&!c.emerg&&!c.job);if(!free.length)return null;
       const[cx,cz]=t.road?[wx(t.x),wx(t.z)]:center(t),used=new Set(jobs.map(j=>j.dest)),Dn=(t.road?[t]:near(t)).sort((a,b)=>(used.has(a)-used.has(b))||(dist(a,cx,cz)-dist(b,cx,cz)));if(!Dn.length)return null;
       const sts=ST.filter(q=>q.svc===svc&&q.out<q.cap&&q.t.b).sort((a,b)=>Math.hypot(a.t.x-t.x,a.t.z-t.z)-Math.hypot(b.t.x-t.x,b.t.z-t.z));
-      for(const st of sts){const from=near(st.t);if(!from.length)continue;
+      for(const st of sts){const from=near(st.t);if(!from.length)continue;{const gt=gates.get(key(st.t));if(gt){const P0=gt.W2(gt.gx,gt.ez+.12);from.sort((a,b)=>Math.hypot(wx(a.x)-P0[0],wx(a.z)-P0[1])-Math.hypot(wx(b.x)-P0[0],wx(b.z)-P0[1]));}}
         // a patrol car already on the street answers police calls from where it is
         let c=null,rt=null,dd=null;if(svc==='police'){const pc=free.filter(q=>q.shown&&q.a&&q.a.road&&q.pos).sort((a,b)=>Math.hypot(a.pos.x-cx,a.pos.z-cz)-Math.hypot(b.pos.x-cx,b.pos.z-cz))[0];
           if(pc)for(const d of Dn){rt=route(pc.a,d,30000);if(rt){c=pc;dd=d;break;}}}
@@ -5037,6 +5046,16 @@ const Disaster=(()=>{
       j.fx.mist.forEach((m,i)=>{const p=(now*.5+i/6)%1;m.position.set(cx+Math.sin(i*2.1)*.12*f.S,ty+p*.35,cz+Math.cos(i*1.3)*.12*f.S);m.scale.setScalar((.4+p*1.4)*f.S);m.visible=f.k>0;});
       f.k-=dt/14;}
     // ---- helicopters ----
+    // sliding gates: open while one of the station's vehicles is near the gate, close behind it
+    const gates=new Map(),GV={police:'police',funeral:'hearse',cemetery:'hearse',landfill:'garbage',recycle:'garbage',maint:'maint',post:'mail',sorting:'mail',prison:'pvan'};
+    const gateGeo=(w,h)=>{const P2=[[RB(w,.008,.008,0,h-.004,0),0x5a5f66],[RB(w,.008,.008,0,.012,0),0x5a5f66]];for(let i=0;i<=Math.round(w/.02);i++)P2.push([RB(.004,h,.004,-w/2+i*w/Math.round(w/.02),0,0),0x6d7378]);return mergeG(P2,true);};
+    function syncGates(){const want=new Set();for(const t of G.tiles){const b=t.b;if(!b||t.ref!=null||b.uc||!SGATE[b.kind])continue;const k=key(t);want.add(k);if(gates.has(k))continue;
+        const[gx,gw]=SGATE[b.kind],S2=b.size||1,H2=S2/2,r=b.rot||0,c=Math.cos(r),sn=Math.sin(r),cx=wx(t.x)+(S2-1)/2,cz=wx(t.z)+(S2-1)/2,W2=(lx,lz)=>[cx+lx*c+lz*sn,cz-lx*sn+lz*c];
+        const h=b.kind==='prison'?.15:b.kind==='funeral'||b.kind==='cemetery'?.055:.07,m=new THREE.Mesh(gateGeo(gw,h),new THREE.MeshStandardMaterial({vertexColors:true,metalness:.5,roughness:.45}));m.castShadow=true;scene.add(m);
+        gates.set(k,{m,gx,gw,ez:H2-.015,W2,r,a:0,v:GV[b.kind]});}
+      for(const[k,g]of gates)if(!want.has(k)){scene.remove(g.m);gates.delete(k);}}
+    function gateAnim(dt){for(const g of gates.values()){const P0=g.W2(g.gx,g.ez+.12);let open=false;for(const c of cars){if(c.v.id!==g.v||!c.shown||!c.pos)continue;const dx=c.pos.x-P0[0],dz=c.pos.z-P0[1];if(dx*dx+dz*dz<.3){open=true;break;}}
+      g.a+=((open?1:0)-g.a)*Math.min(1,dt*2.5);const lx=g.gx+g.a*g.gw*.92,P=g.W2(lx,g.ez-.012);g.m.position.set(P[0],0,P[1]);g.m.rotation.y=g.r;}}
     const helis=new Map(),PADL={fire:[-.08,FLOOR*2+.024,-.12],police:[-.12,FLOOR*2+.022,-.18],hospital:[-.3,FLOOR*6+.026,-.4]},HSVC={fire:'fire',police:'police',hospital:'health'};
     const HCOL={fire:[0xc62828,0xf2f2f2],police:[0x1f3a5f,0xf2f2f2],hospital:[0xf2f2f2,0xd32f2f]};
     function mkHeli(kind){const[c1,c2]=HCOL[kind],g=new THREE.Group(),M=c=>new THREE.MeshStandardMaterial({color:c,roughness:.45,metalness:.25}),add=(geo,mt,x=0,y=0,z=0)=>{const m=new THREE.Mesh(geo,mt);m.position.set(x,y,z);m.castShadow=true;g.add(m);return m;};
@@ -5121,9 +5140,9 @@ const Disaster=(()=>{
     function update(dt,now,rdt){stT-=rdt;if(stT<=0&&G)stations();calls(dt);bagT-=rdt;if(bagT<=0&&G){bagT=2;bagUpdate();potUpdate();}for(const arr of spins.values())for(const m of arr)m.rotation.y+=rdt*.25;
       for(const j of jobs.slice()){const c=j.c;if(c.job!==j||(!c.emerg)){finish(j);continue;}if(c.emerg==='work'){j.arr=true;j.at+=dt;work(j,dt,now);}
         if(j.fire?fires.indexOf(j.fire)<0:(j.arr&&j.at>j.dur))finish(j);}
-      lights(now);heliUpdate(dt,rdt,now);
+      lights(now);heliUpdate(dt,rdt,now);gateAnim(rdt);
       sirT-=dt;if(sirT<=0){const c=cars.find(q=>q.emerg&&q.siren&&q.shown&&q.a&&(q.emerg==='go'||q.emerg==='back')&&tileSeen(q.a));if(c&&cam.dist<26){Snd.play(c.v.id==='police'?'yelp':'siren');sirT=.86;}else sirT=.3;}}
-    return{call,ended,update:(dt,now)=>update(dt,now,1/60),upd:update,get jobs(){return jobs},get helis(){return helis},get ST(){return ST},dispatch,heliCall,stations};})();
+    return{call,ended,update:(dt,now)=>update(dt,now,1/60),upd:update,get jobs(){return jobs},get helis(){return helis},get gates(){return gates},get ST(){return ST},dispatch,heliCall,stations};})();
   function ignite(t){if(!t||!t.b||fires.some(f=>f.t===t)||t.b.kind==='fire')return;const[cx,cz,S]=center(t),h=hgt(t.b),g=new THREE.Group();g.position.set(cx,0,cz);
     const fl=[],rf=Math.min(.42,S*.42);for(let i=0;i<12;i++){const m=new THREE.Mesh(coneG,i%2?flameMat2:flameMat);if(i<6)m.position.set((Math.random()-.5)*S*.5,h,(Math.random()-.5)*S*.5);else{const side=i%4,a=(Math.random()-.5)*S*.6,y=h*(.15+Math.random()*.8);m.position.set(side===0?rf:side===1?-rf:a,y,side===2?rf:side===3?-rf:a);}g.add(m);fl.push(m);}
     const sm=[];for(let i=0;i<9;i++){const m=new THREE.Mesh(puffG,smokeMat);m.userData.ph=Math.random();g.add(m);sm.push(m);}
