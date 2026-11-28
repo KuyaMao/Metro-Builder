@@ -1121,7 +1121,7 @@ function roadParts0(t,out){
       pos.push(P0[0],0,P0[1],P1[0],0,P1[1],P1[0],h1,P1[1],P0[0],0,P0[1],P1[0],h1,P1[1],P0[0],h0,P0[1]);}};
     const Jw=t._ramp[4]===1?T(t.x+dx,t.z+dz):T(t.x+2*dx,t.z+2*dz),KLw=isBigIx(Jw);
     for(const sg of[-1,1]){const u=sg*E;if(KLw){// cloverleaf: the loops and ramps join along this whole tile, so grass slopes instead of walls
-        const gp=[],n=8;for(let i=0;i<n;i++){const s0=-.5+i/n,s1=-.5+(i+1)/n,h0=.012+rampAt(t,X+dx*s0+px*u,Z+dz*s0+pz*u),h1=.012+rampAt(t,X+dx*s1+px*u,Z+dz*s1+pz*u),A0=[X+dx*s0+px*u,Z+dz*s0+pz*u],A1=[X+dx*s1+px*u,Z+dz*s1+pz*u],w0=sg*Math.min(.2,h0*1.4),w1=sg*Math.min(.2,h1*1.4),B0=[A0[0]+px*w0,A0[1]+pz*w0],B1=[A1[0]+px*w1,A1[1]+pz*w1];
+        const gp=[],n=8;for(let i=0;i<n;i++){const s0=-.5+i/n,s1=-.5+(i+1)/n,h0=.012+rampAt(t,X+dx*s0+px*u,Z+dz*s0+pz*u),h1=.012+rampAt(t,X+dx*s1+px*u,Z+dz*s1+pz*u),A0=[X+dx*s0+px*u,Z+dz*s0+pz*u],A1=[X+dx*s1+px*u,Z+dz*s1+pz*u],w0=sg*Math.min(.34,h0*2.2),w1=sg*Math.min(.34,h1*2.2),B0=[A0[0]+px*w0,A0[1]+pz*w0],B1=[A1[0]+px*w1,A1[1]+pz*w1];
           gp.push(A0[0],h0-.002,A0[1],B0[0],.004,B0[1],B1[0],.004,B1[1],A0[0],h0-.002,A0[1],B1[0],.004,B1[1],A1[0],h1-.002,A1[1]);gp.push(A0[0],h0-.002,A0[1],B1[0],.004,B1[1],B0[0],.004,B0[1],A0[0],h0-.002,A0[1],A1[0],h1-.002,A1[1],B1[0],.004,B1[1]);}
         const gg=new THREE.BufferGeometry();gg.setAttribute('position',new THREE.BufferAttribute(new Float32Array(gp),3));gg.computeVertexNormals();out.bdet.push([gg,0x56683a]);}
       else if(t._ramp[4]===1){const sT=1-ixTT(Jw);seg(-.5,sT-RW-.12,u);seg(sT+RW+.12,.5,u);}else seg(-.5,.5,u);}
@@ -1557,7 +1557,7 @@ function ichgParts(J,I,out){const X=wx(J.x),Z=wx(J.z),ew=I.hx===1,Xr=I.X[0],xg=r
         const W2=(E,i)=>pt(E[i][0],E[i][1]),band=(P1,P2,H1,H2,col,k0,k1,dy,to)=>{const pos=[];for(let i=k0;i<k1;i++){const a0=W2(P1,i),b0=W2(P2,i),a1=W2(P1,i+1),b1=W2(P2,i+1);pos.push(a0[0],H1[i]+dy,a0[1],b0[0],H2[i]+dy,b0[1],b1[0],H2[i+1]+dy,b1[1],a0[0],H1[i]+dy,a0[1],b1[0],H2[i+1]+dy,b1[1],a1[0],H1[i+1]+dy,a1[1]);}if(pos.length)(to||P)(to?slopeG(pos):upGeo(pos),col);};
         const mix=t=>A.map((q,i)=>[q[0]+(B[i][0]-q[0])*t,q[1]+(B[i][1]-q[1])*t]);band(A,B,HH,HH,RCOL.asp,j0,j1,0);
         const offHw=i=>Math.min(A[i][1],B[i][1])>hwE+.03;let e0=j0;while(e0<j1&&!offHw(e0))e0++;const e1=mouth?j1:j1-3;band(A,mix(.06),HH,HH,RCOL.wht,e0,e1,.0005);band(mix(.94),B,HH,HH,RCOL.wht,e0,e1,.0005);
-        for(const[E,sg]of[[A,1],[B,-1]]){const G=[],GH=[];for(let i=0;i<n;i++){const w=Math.min(.2,(HH[i]-Y0)*1.5+.01);G.push([E[i][0]+NN[i][0]*sg*w,E[i][1]+NN[i][1]*sg*w]);GH.push(.004);}band(E,G,HH,GH,GRS,e0,j1,-.0004,D);
+        for(const[E,sg]of[[A,1],[B,-1]]){const G=[],GH=[];for(let i=0;i<n;i++){const w=Math.min(.34,(HH[i]-Y0)*2.4+.01);const g=[E[i][0]+NN[i][0]*sg*w,E[i][1]+NN[i][1]*sg*w];if(g[1]<hwE+.02)g[1]=Math.max(g[1],Math.min(E[i][1],hwE+.02));G.push(g);GH.push(.004);}band(E,G,HH,GH,GRS,e0,j1,-.0004,D);
           let s0=-1;for(let i=e0;i<=j1;i++){const up=i<j1&&HH[i]-Y0>.03;if(up&&s0<0)s0=i;if((!up||i===j1)&&s0>=0){const pos=[];for(let k=s0;k<i-1;k++){const a=pt(E[k][0]-NN[k][0]*sg*.006,E[k][1]-NN[k][1]*sg*.006),b=pt(E[k+1][0]-NN[k+1][0]*sg*.006,E[k+1][1]-NN[k+1][1]*sg*.006),y0=HH[k]+.006,y1=HH[k+1]+.006,z0=HH[k]+.022,z1=HH[k+1]+.022;
             pos.push(a[0],y0,a[1],b[0],y1,b[1],b[0],z1,b[1],a[0],y0,a[1],b[0],z1,b[1],a[0],z0,a[1],a[0],y0,a[1],b[0],z1,b[1],b[0],y1,b[1],a[0],y0,a[1],a[0],z0,a[1],b[0],z1,b[1]);}
             if(pos.length){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(pos),3));g.computeVertexNormals();D(g,RAIL);}s0=-1;}}}
@@ -1566,7 +1566,12 @@ function ichgParts(J,I,out){const X=wx(J.x),Z=wx(J.z),ew=I.hx===1,Xr=I.X[0],xg=r
           if(stop){const a2=pt(d+sg*.002,r-RW+.012),b2=pt(d+sg*.018,r+RW-.012);P(HQ(Math.min(a2[0],b2[0]),Math.min(a2[1],b2[1]),Math.max(a2[0],b2[0]),Math.max(a2[1],b2[1]),Y0+diaH(r)+.0008),RCOL.wht);}}};
       const j0o=OUT.findIndex(p=>p[1]>.4);rib(OUT,j0o,OUT.length-1,true,J.ixv==='p');rib(OUT.map(([d,r,h])=>[-d,r,h]),j0o,OUT.length-1,true,false);
       for(const mm of J.ixv==='p'?[-1]:[1,-1]){const S=LP.map(([d,r,h])=>[mm*d,r,h]),n=S.length;let j0=S.findIndex(p=>p[1]>.4),iM=0;for(let i=0;i<n;i++)if(S[i][1]>S[iM][1])iM=i;let j1=n-1;for(let i=iM;i<n;i++)if(S[i][1]<.52){j1=i;break;}rib(S,j0,j1,false,false);
-        const c0=pt(mm*KL_C[0],KL_C[1]);for(const[dx2,dz2,sc]of[[0,0,1],[.12,.08,.7],[-.1,.1,.8]])out.bdet.push([new THREE.IcosahedronGeometry(.05*sc,0).scale(1,1.1,1).translate(c0[0]+dx2,.05*sc,c0[1]+dz2),0x3f7a35]);}
+        // the loop's island is filled up to the ramp (a grass mound), so the ramp sits on an embankment, not a rim round a pit
+        {const C=[mm*KL_C[0],KL_C[1]],n2=S.length,inner=[];for(let i=j0;i<=j1;i++){const a=S[Math.max(0,i-1)],b=S[Math.min(n2-1,i+1)],td=b[0]-a[0],tr=b[1]-a[1],l=Math.hypot(td,tr)||1,nd=-tr/l,nr=td/l,qa=[S[i][0]+nd*RW,S[i][1]+nr*RW],qb=[S[i][0]-nd*RW,S[i][1]-nr*RW],q=Math.hypot(qa[0]-C[0],qa[1]-C[1])<Math.hypot(qb[0]-C[0],qb[1]-C[1])?qa:qb;
+            if(Math.hypot(q[0]-C[0],q[1]-C[1])<KL_R+.02)inner.push([q,Y0+S[i][2]-.003]);}
+          const hm=inner.reduce((m,x)=>Math.max(m,x[1]),0),hc=Math.max(.006,hm*.55),c0=pt(C[0],C[1]),pos=[];for(let i=0;i<inner.length-1;i++){const a=pt(inner[i][0][0],inner[i][0][1]),b=pt(inner[i+1][0][0],inner[i+1][0][1]);pos.push(c0[0],hc,c0[1],a[0],inner[i][1],a[1],b[0],inner[i+1][1],b[1]);}
+          if(pos.length)D(slopeG(pos),GRS);
+          for(const[dx2,dz2,sc]of[[0,0,1],[.12,.08,.7],[-.1,.1,.8]])out.bdet.push([new THREE.IcosahedronGeometry(.05*sc,0).scale(1,1.1,1).translate(c0[0]+dx2,hc+.04*sc,c0[1]+dz2),0x3f7a35]);}}
       continue;}
     const CL=crSample(diaOff(RL,e,hT,ixTT(J)).slice(1),8);
     for(const m of[1,-1]){// m=1 off-ramp before the bridge, m=-1 on-ramp after it (mirror image)
@@ -1941,14 +1946,15 @@ function servParts(b){
       break;}
     case 'maint':{const lv=Math.min(3,b.lv||1);
       // depot: garage with orange doors, the trucks' yard, cones and gravel; level 2 an asphalt silo and a roller, level 3 a salt dome
-      D(RB(.98,.004,.98,0,0,0),0x9c968a);D(RB(.4,.007,.5,.22,0,.24),0x4a4d52);W('brk',.62,FLOOR*1.4,.32,-.1,0,-.3,0x8d8478);D(RB(.64,.014,.34,-.1,FLOOR*1.4,-.3),0x5a5f66);
+      D(RB(.98,.004,.98,0,0,0),0x9c968a);D(RB(.9,.007,.46,0,0,.1),0x4a4d52);D(RB(.4,.007,.18,.22,0,.4),0x4a4d52);for(let i=0;i<5;i++)D(RB(.006,.008,.2,-.42+i*.2,0,.03),0xe8e8e8);W('brk',.62,FLOOR*1.4,.32,-.1,0,-.3,0x8d8478);D(RB(.64,.014,.34,-.1,FLOOR*1.4,-.3),0x5a5f66);
       for(let i=0;i<3;i++){D(RB(.15,FLOOR*1.05,.006,-.32+i*.2,0,-.138),0xf28c28);for(let k=0;k<4;k++)D(RB(.15,.003,.007,-.32+i*.2,.03+k*.04,-.137),0xc46a14);}
-      for(let i=0;i<Math.min(4,lv+1);i++)pveh('r_pickup',.08+i*.13,.24,0,0xf28c28,5.3);
-      for(let i=0;i<9;i++){const x=-.4+(i%3)*.04,z=.15+Math.floor(i/3)*.04;D(new THREE.ConeGeometry(.011,.03,8).translate(x,.015,z),0xff6d00);D(RB(.016,.003,.016,x,0,z),0x222222);}
-      D(new THREE.ConeGeometry(.1,.08,10).translate(-.32,.04,.36),0x8e8a80);D(new THREE.ConeGeometry(.07,.05,10).translate(-.18,.025,.4),0x5f5b55);
+      // trucks parked nose-in at their bays, one per bay, the fourth beside the garage
+      for(let i=0;i<Math.min(4,lv+1);i++)pveh('r_pickup',-.32+i*.2,.03,Math.PI,0xf28c28,5.3);
+      for(let i=0;i<9;i++){const x=-.22+(i%3)*.04,z=.22+Math.floor(i/3)*.04;D(new THREE.ConeGeometry(.011,.03,8).translate(x,.015,z),0xff6d00);D(RB(.016,.003,.016,x,0,z),0x222222);}
+      D(new THREE.ConeGeometry(.07,.06,10).translate(-.04,.03,.42),0x8e8a80);
       if(lv>=2){D(CY(.05,.05,.3,.38,.04,-.34,12),0xb0b4b8);for(const[x,z]of[[.34,-.38],[.42,-.38],[.34,-.3],[.42,-.3]])D(CY(.005,.005,.04,x,0,z,4),0x6d7378);D(new THREE.ConeGeometry(.05,.06,12).rotateX(Math.PI).translate(.38,.07,-.34),0xb0b4b8);
         D(RB(.06,.035,.04,.42,0,.0),0xf2b705);D(CY(.02,.02,.05,.42,.02,.03,10).rotateZ(Math.PI/2),0x555555);}
-      if(lv>=3){D(new THREE.SphereGeometry(.14,16,8,0,Math.PI*2,0,Math.PI/2).scale(1,.9,1).translate(-.3,0,.0),0xd9d4c7);D(RB(.08,.07,.02,-.3,0,.13),0x6d5a3a);}
+      if(lv>=3){D(new THREE.SphereGeometry(.12,16,8,0,Math.PI*2,0,Math.PI/2).scale(1,.9,1).translate(-.34,0,.36),0xd9d4c7);D(RB(.02,.06,.07,-.215,0,.36),0x6d5a3a);}
       fence();break;}
     case 'post':{const lv=Math.min(3,b.lv||1);
       // post office: brick front with a counter entrance and post boxes, vans at the loading dock; level 2 a parcel-locker wall, level 3 a parcel hall
