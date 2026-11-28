@@ -1121,7 +1121,7 @@ function roadParts0(t,out){
       pos.push(P0[0],0,P0[1],P1[0],0,P1[1],P1[0],h1,P1[1],P0[0],0,P0[1],P1[0],h1,P1[1],P0[0],h0,P0[1]);}};
     const Jw=t._ramp[4]===1?T(t.x+dx,t.z+dz):T(t.x+2*dx,t.z+2*dz),KLw=isBigIx(Jw);
     for(const sg of[-1,1]){const u=sg*E;if(KLw){// cloverleaf: the loops and ramps join along this whole tile, so grass slopes instead of walls
-        const gp=[],n=8;for(let i=0;i<n;i++){const s0=-.5+i/n,s1=-.5+(i+1)/n,h0=.012+rampAt(t,X+dx*s0+px*u,Z+dz*s0+pz*u),h1=.012+rampAt(t,X+dx*s1+px*u,Z+dz*s1+pz*u),A0=[X+dx*s0+px*u,Z+dz*s0+pz*u],A1=[X+dx*s1+px*u,Z+dz*s1+pz*u],w0=sg*Math.min(.26,h0*1.9),w1=sg*Math.min(.26,h1*1.9),B0=[A0[0]+px*w0,A0[1]+pz*w0],B1=[A1[0]+px*w1,A1[1]+pz*w1];
+        const gp=[],n=8;for(let i=0;i<n;i++){const s0=-.5+i/n,s1=-.5+(i+1)/n,h0=.012+rampAt(t,X+dx*s0+px*u,Z+dz*s0+pz*u),h1=.012+rampAt(t,X+dx*s1+px*u,Z+dz*s1+pz*u),A0=[X+dx*s0+px*u,Z+dz*s0+pz*u],A1=[X+dx*s1+px*u,Z+dz*s1+pz*u],w0=sg*Math.min(.06,h0*.4+.01),w1=sg*Math.min(.06,h1*.4+.01),B0=[A0[0]+px*w0,A0[1]+pz*w0],B1=[A1[0]+px*w1,A1[1]+pz*w1];
           gp.push(A0[0],h0-.002,A0[1],B0[0],.004,B0[1],B1[0],.004,B1[1],A0[0],h0-.002,A0[1],B1[0],.004,B1[1],A1[0],h1-.002,A1[1]);gp.push(A0[0],h0-.002,A0[1],B1[0],.004,B1[1],B0[0],.004,B0[1],A0[0],h0-.002,A0[1],A1[0],h1-.002,A1[1],B1[0],.004,B1[1]);}
         const gg=new THREE.BufferGeometry();gg.setAttribute('position',new THREE.BufferAttribute(new Float32Array(gp),3));gg.computeVertexNormals();out.bdet.push([gg,0x56683a]);}
       else if(t._ramp[4]===1){const sT=1-ixTT(Jw);seg(-.5,sT-RW-.12,u);seg(sT+RW+.12,.5,u);}else seg(-.5,.5,u);}
@@ -1406,8 +1406,9 @@ function klRise(pts,i0,iB,h1){const S=[0];for(let i=1;i<pts.length;i++)S.push(S[
 function klLoop(ox){const P=[[.2,.345],[.5,.35],[.7,.37],[.9,.5]],[cd,cr]=KL_C,NA=20;for(let i=0;i<=NA;i++){const a=(-55+235*i/NA)*Math.PI/180;P.push([cd+Math.cos(a)*KL_R,cr+Math.sin(a)*KL_R]);}
   const iB=P.length;P.push([.52,.88],[ox+.14,.5],[ox+.04,.2],[ox,-.15]);const k=6;return klRise(crSample(P,k),3*k,iB*k,diaH(.88));}
 // outer exit ramp (d<0 quadrant): leaves the highway on the tile before, swings round the loop and meets the crossing road square at TK
-function klOuter(e){const P=[[-2.5,.345],[-2.3,.37],[-2.12,.45],[-1.95,.6],[-1.8,.85],[-1.72,1.12],[-1.62,1.45],[-1.4,1.72],[-1.0,1.85],[-.62,TK],[-e-.12,TK],[-e,TK]],k=6,pts=crSample(P,k);
-  return klRise(pts,2*k,pts.length-1,diaH(TK)).map(([d,r,h],i,a)=>i===a.length-1?[d,r,diaH(TK)]:[d,r,h]);}
+const KL_DA=-2.5,KL_DF=-2.2,KL_DS=-1.98;
+function klOuter(e){const P=[[-2.5,.345],[-2.35,.43],[-2.2,.535],[KL_DS,RL],[-1.84,.66],[-1.76,.88],[-1.7,1.12],[-1.62,1.45],[-1.4,1.72],[-1.0,1.85],[-.62,TK],[-e-.12,TK],[-e,TK]],k=6,pts=crSample(P,k);
+  return klRise(pts,3*k,pts.length-1,diaH(TK)).map(([d,r,h],i,a)=>i===a.length-1?[d,r,diaH(TK)]:[d,r,h]);}
 function klPath(J,X,Y,o){const I=ichgInfo(J);if(!I)return null;const ck=key(J)+'|'+key(X)+'|'+key(Y)+'|'+Math.abs(o).toFixed(3)+J.ixv;if(_klC[ck])return _klC[ck];
   const ex=X.rt==='h',dx0=ex?J.x-X.x:Y.x-J.x,dz0=ex?J.z-X.z:Y.z-J.z,rx=-dz0,rz=dx0,other=ex?Y:X,side=(other.x-J.x)*rx+(other.z-J.z)*rz>0?1:-1;
   const Cc=roadGeo(I.X[0]).C,e=Cc+.03,lo=rtOf(I.X[0]).lo||[.085],oxL=lo[lo.length-1],ox=ex?lo[0]:Math.min(Math.abs(o),Cc-.05),P=[],line=(d0,r0,d1,r1,n)=>{for(let i=0;i<=n;i++){const f=i/n,d=d0+(d1-d0)*f,r=r0+(r1-r0)*f;P.push([d,r,diaH(Math.abs(d)<.6?r:0)]);}};
@@ -1526,7 +1527,7 @@ function ichgPath(a,prev,b,p,off){const fx=a.x-prev.x,fz=a.z-prev.z,str=b.x===a.
   _pp.x=A[0]+(B[0]-A[0])*f;_pp.z=A[1]+(B[1]-A[1])*f;const tx=B[0]-A[0],tz=B[1]-A[1],l=Math.hypot(tx,tz)||1;_pp.tx=tx/l;_pp.tz=tz/l;
   const k=sm(.1,.9,s/Q.L);_ppH=Q.h0+(Q.h1-Q.h0)*k;return _pp;}
 const ichgLen=(a,prev,b,off)=>{const fx=a.x-prev.x,fz=a.z-prev.z;if(b.x===a.x+fx&&b.z===a.z+fz)return 1;return ichgPoly(a,prev,b,off).L;};
-function refreshIchg(){if(!G)return;for(const t of G.tiles)if(t.icv)t.icv=null;for(const J of G.tiles)if(J.ix==='ichg'||J.ix==='rbig'||J.ix==='slip'){const I=J.ix==='ichg'?ichgInfo(J):J.ix==='rbig'?rbInfo(J):slipInfo(J);if(I)for(const c of I.stub?I.corners.concat([I.stub]):I.corners)if(c&&!c.road&&!c.b){c.icv=key(J);if(c===I.stub&&c.tree){c.tree=false;setTree(c);markDirty(c);}}}}
+function refreshIchg(){if(!G)return;for(const t of G.tiles)if(t.icv)t.icv=null;for(const J of G.tiles)if(J.ix==='ichg'||J.ix==='rbig'||J.ix==='slip'){const I=J.ix==='ichg'?ichgInfo(J):J.ix==='rbig'?rbInfo(J):slipInfo(J);if(I)for(const c of I.stub?I.corners.concat([I.stub]):I.corners)if(c&&!c.road&&!c.b){c.icv=key(J);if(c.tree){c.tree=false;setTree(c);markDirty(c);}}}}
 // geometry: straight highway, the bridge deck with parapets and piers, ramps as raised ribbons with barriers
 function ichgParts(J,I,out){const X=wx(J.x),Z=wx(J.z),ew=I.hx===1,Xr=I.X[0],xg=roadGeo(Xr),Cc=xg.C,sw=xg.sws==='n'?0:xg.sw,D=(g,c)=>out.bdet.push([g,c]),P=(g,c)=>out.road.push([g,c]);
   J._mOv=ew?10:5;roadParts(J,out);J._mOv=null;
@@ -1553,12 +1554,22 @@ function ichgParts(J,I,out){const X=wx(J.x),Z=wx(J.z),ew=I.hx===1,Xr=I.X[0],xg=r
   for(const Hb of I.H){const dx0=J.x-Hb.x,dz0=J.z-Hb.z,rx=-dz0,rz=dx0,e=DBL?DB_R+.2:Cc+.03,pt=(d,r)=>[X+dx0*d+rx*r,Z+dz0*d+rz*r];
     if(KL){// big cloverleaf / parclo: outer ramps and loops drawn as ribbons along the cars' own centre lines
       const lo2=rtOf(Xr).lo||[.085],ee=Cc+.03,OUT=klOuter(ee),LP=klLoop(lo2[lo2.length-1]);
-      const rib=(S,j0,j1,mouth,stop)=>{const n=S.length,A=[],B=[],HH=[],NN=[];for(let i=0;i<n;i++){const a=S[Math.max(0,i-1)],b=S[Math.min(n-1,i+1)],td=b[0]-a[0],tr=b[1]-a[1],l=Math.hypot(td,tr)||1,nd=-tr/l,nr=td/l,[d,r,h]=S[i];A.push([d+nd*RW,r+nr*RW]);B.push([d-nd*RW,r-nr*RW]);NN.push([nd,nr]);HH.push(Y0+h);}
+      const rib=(S,j0,j1,mouth,stop,aux)=>{const n=S.length,A=[],B=[],HH=[],NN=[];for(let i=0;i<n;i++){const a=S[Math.max(0,i-1)],b=S[Math.min(n-1,i+1)],td=b[0]-a[0],tr=b[1]-a[1],l=Math.hypot(td,tr)||1,nd=-tr/l,nr=td/l,[d,r,h]=S[i];A.push([d+nd*RW,r+nr*RW]);B.push([d-nd*RW,r-nr*RW]);NN.push([nd,nr]);HH.push(Y0+h);}
         const W2=(E,i)=>pt(E[i][0],E[i][1]),band=(P1,P2,H1,H2,col,k0,k1,dy,to,keep)=>{const pos=[];for(let i=k0;i<k1;i++){if(keep&&!keep(i))continue;const a0=W2(P1,i),b0=W2(P2,i),a1=W2(P1,i+1),b1=W2(P2,i+1);pos.push(a0[0],H1[i]+dy,a0[1],b0[0],H2[i]+dy,b0[1],b1[0],H2[i+1]+dy,b1[1],a0[0],H1[i]+dy,a0[1],b1[0],H2[i+1]+dy,b1[1],a1[0],H1[i+1]+dy,a1[1]);}if(pos.length)(to||P)(to?slopeG(pos):upGeo(pos),col);};
         const mixE=(E1,E2,t)=>E1.map((q,i)=>[q[0]+(E2[i][0]-q[0])*t,q[1]+(E2[i][1]-q[1])*t]),at=(E,rr)=>E.map(q=>[q[0],rr]);
         // which edge is away from the highway, where the ramp starts to leave it (ja) and where it is wholly off it (jb)
         const k=Math.min(n-1,j0+Math.floor((j1-j0)/3)),oa=A[k][1]>B[k][1],Eo=oa?A:B,Ei=oa?B:A,ro=i=>Eo[i][1],ri=i=>Ei[i][1];
-        let ja=j0;while(ja<j1&&ro(ja)<hwE+.004)ja++;let jb=ja;while(jb<j1&&ri(jb)<hwE+.004)jb++;let jg=jb;while(jg<j1&&ri(jg)-hwE<.15)jg++;
+        let ja=j0;while(ja<j1&&ro(ja)<hwE+.004)ja++;let jb=ja;while(jb<j1&&ri(jb)<hwE+.004)jb++;
+        if(aux){// like the diamond: a full-width deceleration / acceleration lane beside the highway, a dashed lane-drop line, then the ramp
+          const sg0=Math.sign(S[0][0])||-1,A2=x=>x*-sg0,q=(a,r)=>pt(a*-sg0,r),wt=a=>2*RW*smo(clamp((a-KL_DA)/(KL_DF-KL_DA),0,1)),ys=.0128,N2=14,pos=[],ln=[];
+          for(let k2=0;k2<N2;k2++){const u0=KL_DA+(KL_DS-KL_DA)*k2/N2,u1=KL_DA+(KL_DS-KL_DA)*(k2+1)/N2,a0=q(u0,hwE-.004),a1=q(u1,hwE-.004),b0=q(u0,hwE+wt(u0)),b1=q(u1,hwE+wt(u1));pos.push(a0[0],ys,a0[1],b0[0],ys,b0[1],b1[0],ys,b1[1],a0[0],ys,a0[1],b1[0],ys,b1[1],a1[0],ys,a1[1]);
+            const c0=q(u0,hwE+wt(u0)-.012),c1=q(u1,hwE+wt(u1)-.012);ln.push(c0[0],ys+.0005,c0[1],b0[0],ys+.0005,b0[1],b1[0],ys+.0005,b1[1],c0[0],ys+.0005,c0[1],b1[0],ys+.0005,b1[1],c1[0],ys+.0005,c1[1]);}
+          P(upGeo(pos),RCOL.asp);P(upGeo(ln),RCOL.wht);
+          {const a=q(KL_DF,.432),b=q(KL_DS,.448);P(HQ(Math.min(a[0],b[0]),Math.min(a[1],b[1]),Math.max(a[0],b[0]),Math.max(a[1],b[1]),ys+.0003),RCOL.asp);
+            for(let u=KL_DF;u<KL_DS-.04;u+=.09){const p0=q(u,.434),p1=q(u+.045,.446);P(HQ(Math.min(p0[0],p1[0]),Math.min(p0[1],p1[1]),Math.max(p0[0],p1[0]),Math.max(p0[1],p1[1]),ys+.0007),RCOL.wht);}}
+          ja=jb=Math.max(j0,S.findIndex(p2=>A2(p2[0])>=KL_DS-.002));}
+        let jg=jb;
+        while(jg<j1&&ri(jg)-hwE<.15)jg++;
         // taper: asphalt from the highway edge out to the ramp's outer edge, the highway edge line dashed across it
         band(at(Eo,hwE-.014),Eo,HH,HH,RCOL.asp,ja,jb,0);band(at(Eo,hwE-.002),at(Eo,hwE+.008),HH,HH,RCOL.wht,ja,jb,.0006,null,i=>(i>>1)%2===0);
         // the ramp itself and the gore (asphalt between the highway edge and the ramp's inner edge) with its white border and chevrons
@@ -1569,9 +1580,12 @@ function ichgParts(J,I,out){const X=wx(J.x),Z=wx(J.z),ew=I.hx===1,Xr=I.X[0],xg=r
         for(const[E,E2,s0]of[[Eo,mixE(Eo,Ei,.06),ja],[Ei,mixE(Ei,Eo,.06),jb]]){band(E,E2,HH,HH,RCOL.wht,s0,e1,.0005,null,i=>!nearRd(E,i));band(E,E2,HH,HH,RCOL.wht,s0,e1,.0005,null,i=>nearRd(E,i)&&(i>>1)%2===0);}
         if(!mouth){const Er=Ei,sgn=Math.sign(S[j1][0])||1,dd=sgn*(Cc-.004);let f0=-1;for(let i=jb;i<=j1;i++)if(Er[i][1]>.45&&Er[i][1]<1.2&&Math.abs(Er[i][0])<Cc+.3&&i>jb+(j1-jb)/2){f0=i;break;}
           if(f0>=0){const R2=Er.map(q=>[dd,q[1]]),H2=Er.map(q=>Y0+diaH(q[1])-.0004);band(R2,Er,H2,HH,RCOL.asp,f0,j1,-.0002);}}
-        for(const[E,sg]of[[A,1],[B,-1]]){const G=[],GH=[];for(let i=0;i<n;i++){const w=Math.min(.26,(HH[i]-Y0)*1.9+.01);let g=[E[i][0]+NN[i][0]*sg*w,E[i][1]+NN[i][1]*sg*w];
+        for(const[E,sg]of[[A,1],[B,-1]]){const G=[],GH=[];const WALLH=.085,isW=i=>HH[i]-Y0>WALLH;for(let i=0;i<n;i++){let w=isW(i)?.012:Math.min(.17,(HH[i]-Y0)*1.9+.01);
+            // a slope must not run over another part of the same ramp (a loop's low start beside its high end): shorten it
+            for(let it=0;it<6;it++){const gx=E[i][0]+NN[i][0]*sg*w,gr=E[i][1]+NN[i][1]*sg*w;let hit=false;for(let j=0;j<n;j+=2){if(Math.abs(j-i)<12)continue;if(Math.hypot(S[j][0]-gx,S[j][1]-gr)<RW+.035){hit=true;break;}}if(!hit)break;w*=.6;}
+            let g=[E[i][0]+NN[i][0]*sg*w,E[i][1]+NN[i][1]*sg*w];
             // never over the highway or the crossing road
-            if(g[1]<hwE+.02)g[1]=Math.max(g[1],Math.min(E[i][1],hwE+.02));if(g[1]>.45&&Math.abs(g[0])<Cc+.06)g=Math.abs(E[i][0])>=Cc+.06?[Math.sign(E[i][0])*(Cc+.06),g[1]]:[E[i][0],E[i][1]];G.push(g);GH.push(.004);}band(E,G,HH,GH,GRS,jb,j1,-.0004,D);
+            if(g[1]<hwE+.02)g[1]=Math.max(g[1],Math.min(E[i][1],hwE+.02));if(g[1]>.45&&Math.abs(g[0])<Cc+.06)g=Math.abs(E[i][0])>=Cc+.06?[Math.sign(E[i][0])*(Cc+.06),g[1]]:[E[i][0],E[i][1]];G.push(g);GH.push(.004);}band(E,G,HH,GH,GRS,jb,j1,-.0004,D,i=>!isW(i)&&!isW(i+1));band(E,G,HH,GH,0xbdb7ac,jb,j1,-.0004,D,i=>isW(i)||isW(i+1));
           let s0=-1;for(let i=jb;i<=j1;i++){const up=i<j1&&HH[i]-Y0>.03&&!nearRd(E,i)&&!(E[i][1]>.45&&Math.abs(E[i][0])<Cc+.16);if(up&&s0<0)s0=i;if((!up||i===j1)&&s0>=0){const pos=[];for(let k=s0;k<i-1;k++){const a=pt(E[k][0]-NN[k][0]*sg*.006,E[k][1]-NN[k][1]*sg*.006),b=pt(E[k+1][0]-NN[k+1][0]*sg*.006,E[k+1][1]-NN[k+1][1]*sg*.006),y0=HH[k]+.006,y1=HH[k+1]+.006,z0=HH[k]+.022,z1=HH[k+1]+.022;
             pos.push(a[0],y0,a[1],b[0],y1,b[1],b[0],z1,b[1],a[0],y0,a[1],b[0],z1,b[1],a[0],z0,a[1],a[0],y0,a[1],b[0],z1,b[1],b[0],y1,b[1],a[0],y0,a[1],a[0],z0,a[1],b[0],z1,b[1]);}
             if(pos.length){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(pos),3));g.computeVertexNormals();D(g,RAIL);}s0=-1;}}}
@@ -1583,12 +1597,12 @@ function ichgParts(J,I,out){const X=wx(J.x),Z=wx(J.z),ew=I.hx===1,Xr=I.X[0],xg=r
               const t0=k/6*Math.PI/2,t1=(k+1)/6*Math.PI/2,o0=[ar[k][0]-m*.012*Math.sin(t0),ar[k][1]+sd*.012*Math.cos(t0)],o1=[ar[k+1][0]-m*.012*Math.sin(t1),ar[k+1][1]+sd*.012*Math.cos(t1)],q0=pt(ar[k][0],ar[k][1]),q1=pt(ar[k+1][0],ar[k+1][1]),w0=pt(o0[0],o0[1]),w1=pt(o1[0],o1[1]),y0=Y0+diaH(ar[k][1])+.006,y1=Y0+diaH(ar[k+1][1])+.006;
               kp.push(q0[0],y0,q0[1],q1[0],y1,q1[1],w1[0],y1,w1[1],q0[0],y0,q0[1],w1[0],y1,w1[1],w0[0],y0,w0[1]);}P(upGeo(pos),RCOL.asp);P(upGeo(kp),RCOL.curb);}}
           if(stop){const a2=pt(d+sg*.002,r-RW+.012),b2=pt(d+sg*.018,r+RW-.012);P(HQ(Math.min(a2[0],b2[0]),Math.min(a2[1],b2[1]),Math.max(a2[0],b2[0]),Math.max(a2[1],b2[1]),Y0+diaH(r)+.0008),RCOL.wht);}}};
-      const j0o=Math.max(0,OUT.findIndex(p=>p[1]>.3));rib(OUT,j0o,OUT.length-1,true,J.ixv==='p');rib(OUT.map(([d,r,h])=>[-d,r,h]),j0o,OUT.length-1,true,false);
+      const j0o=Math.max(0,OUT.findIndex(p=>p[1]>.3));rib(OUT,j0o,OUT.length-1,true,J.ixv==='p',true);rib(OUT.map(([d,r,h])=>[-d,r,h]),j0o,OUT.length-1,true,false,true);
       for(const mm of J.ixv==='p'?[-1]:[1,-1]){const S=LP.map(([d,r,h])=>[mm*d,r,h]),n=S.length;let j0=Math.max(0,S.findIndex(p=>p[1]>.3)),iM=0;for(let i=0;i<n;i++)if(S[i][1]>S[iM][1])iM=i;let j1=n-1;for(let i=iM;i<n;i++)if(S[i][1]<.52){j1=i;break;}rib(S,j0,j1,false,false);
         // the loop's island is filled up to the ramp (a grass mound), so the ramp sits on an embankment, not a rim round a pit
         {const C=[mm*KL_C[0],KL_C[1]],n2=S.length,inner=[];for(let i=j0;i<=j1;i++){const a=S[Math.max(0,i-1)],b=S[Math.min(n2-1,i+1)],td=b[0]-a[0],tr=b[1]-a[1],l=Math.hypot(td,tr)||1,nd=-tr/l,nr=td/l,qa=[S[i][0]+nd*RW,S[i][1]+nr*RW],qb=[S[i][0]-nd*RW,S[i][1]-nr*RW],q=Math.hypot(qa[0]-C[0],qa[1]-C[1])<Math.hypot(qb[0]-C[0],qb[1]-C[1])?qa:qb;
-            if(Math.hypot(q[0]-C[0],q[1]-C[1])<KL_R+.02)inner.push([q,Y0+S[i][2]-.003]);}
-          const hm=inner.reduce((m,x)=>Math.max(m,x[1]),0),hc=Math.max(.006,hm*.55),c0=pt(C[0],C[1]),pos=[];for(let i=0;i<inner.length-1;i++){const a=pt(inner[i][0][0],inner[i][0][1]),b=pt(inner[i+1][0][0],inner[i+1][0][1]);pos.push(c0[0],hc,c0[1],a[0],inner[i][1],a[1],b[0],inner[i+1][1],b[1]);}
+            if(i>=4*6&&i<=24*6&&Math.hypot(q[0]-C[0],q[1]-C[1])<KL_R+.02)inner.push([q,Y0+S[i][2]-.003,i]);}
+          const hm=inner.reduce((m,x)=>Math.max(m,x[1]),0),hc=Math.max(.006,hm*.55),c0=pt(C[0],C[1]),pos=[];for(let i=0;i<inner.length-1;i++){if(inner[i+1][2]!==inner[i][2]+1)continue;const a=pt(inner[i][0][0],inner[i][0][1]),b=pt(inner[i+1][0][0],inner[i+1][0][1]);pos.push(c0[0],hc,c0[1],a[0],inner[i][1],a[1],b[0],inner[i+1][1],b[1]);}
           if(pos.length)D(slopeG(pos),GRS);
           for(const[dx2,dz2,sc]of[[0,0,1],[.12,.08,.7],[-.1,.1,.8]])out.bdet.push([new THREE.IcosahedronGeometry(.05*sc,0).scale(1,1.1,1).translate(c0[0]+dx2,hc+.04*sc,c0[1]+dz2),0x3f7a35]);}}
       continue;}
