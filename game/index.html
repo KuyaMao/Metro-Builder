@@ -338,7 +338,7 @@ const rtOf=t=>RT[t.rt]||RT.s;
 function roadGeo(t){const r=rtOf(t),hw=r===RT.h,bk=!hw&&t.bk?BIKEW:0;return{r,hw,bk,C:r.cw+bk,sw:hw?0:r.sw-bk,sws:hw?'n':(t.sw||'b')};}
 // no walking or cycling through a cloverleaf / parclo (its approach roads have no sidewalks)
 const nearBigIx=t=>[[1,0],[-1,0],[0,1],[0,-1]].some(([a,b])=>{for(const k of[0,1,2]){const q=T(t.x+a*k,t.z+b*k);if(q&&q.ix==='ichg'&&(q.ixv==='k'||q.ixv==='p'))return true;}return false;});
-const pedOK=t=>!!t&&t.road&&t.rt!=='h'&&(t.sw||'b')!=='n'&&!nearBigIx(t);
+const pedOK=t=>!!t&&t.road&&t.rt!=='h'&&(t.sw||'b')!=='n'&&!nearBigIx(t)&&t.ix!=='gs';
 const bikeOK=t=>!!t&&t.road&&t.rt!=='h'&&(rtOf(t).lanes<2||!!t.bk)&&!nearBigIx(t);
 const laneOff=(t,lane)=>{const r=rtOf(t);return r.lo[Math.min(lane,r.lanes-1)];};
 function roadCost(rt,sw,bk,water){const r=RT[rt];let c=r.cost;if(rt!=='h'){if(bk)c+=10;if(sw==='t')c+=8;}return water?c*4+40:c;}
@@ -411,7 +411,7 @@ const LUX=Math.PI;const hemi = new THREE.HemisphereLight(0xe4eef6,0x59604a,0.8*L
 const sun = new THREE.DirectionalLight(0xfff1d6,1.0*LUX);
 sun.castShadow = true; sun.shadow.mapSize.set(2048,2048);
 Object.assign(sun.shadow.camera,{left:-32,right:32,top:32,bottom:-32,near:1,far:120});
-sun.shadow.bias=-0.0004;sun.shadow.normalBias=.012;
+sun.shadow.bias=-0.0004;sun.shadow.normalBias=.02;
 scene.add(sun); scene.add(sun.target);
 
 function canvasTex(w,h,draw,rep){const c=document.createElement('canvas');c.width=w;c.height=h;draw(c.getContext('2d'),w,h);const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=4;if(rep){t.wrapS=t.wrapT=THREE.RepeatWrapping;}return t;}
@@ -439,6 +439,14 @@ let farGround=null;
   const g=mergeG([[q(-W,-W,W,-h),0xffffff],[q(-W,-h,-h,SEA_W),0xffffff],[q(h,-h,W,SEA_W),0xffffff]]);farTex.repeat.set(1,1);
   farGround=new THREE.Mesh(g,new THREE.MeshLambertMaterial({color:0x82a868,map:farTex,vertexColors:true}));scene.add(farGround);}
 ground.rotation.x=-Math.PI/2; ground.receiveShadow=true; scene.add(ground);
+// holes in the ground where an underpass cuts below it (rectangles in world x/z, updated with the road network)
+const GHOLE={u:{value:Array.from({length:24},()=>new THREE.Vector4(0,0,0,0))},n:{value:0}};
+ground.material._obc0=sh=>{sh.uniforms.uHoles=GHOLE.u;sh.uniforms.uNH=GHOLE.n;
+  sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\nvarying vec3 vGW;').replace('#include <begin_vertex>','#include <begin_vertex>\nvGW=(modelMatrix*vec4(transformed,1.0)).xyz;');
+  sh.fragmentShader=sh.fragmentShader.replace('#include <common>','#include <common>\nvarying vec3 vGW;uniform vec4 uHoles[24];uniform int uNH;').replace('void main() {','void main() {\n  for(int i=0;i<24;i++){if(i>=uNH)break;vec4 hh=uHoles[i];if(vGW.x>hh.x&&vGW.x<hh.z&&vGW.z>hh.y&&vGW.z<hh.w)discard;}');};
+ground.material.onBeforeCompile=ground.material._obc0;
+function gsHoles(){let n=0;if(G)for(const J of G.tiles){if(n>=24)break;if(J.ix!=='gs')continue;const I=gsInfo(J);if(!I||!I.low)continue;const ug=roadGeo(T(J.x+I.dx,J.z+I.dz)),E=ug.C+(ug.sws==='n'?.03:ug.sw)+.013,Ls=I.L+.5,X=wx(J.x),Z=wx(J.z);
+  GHOLE.u.value[n++].set(X-(I.dx?Ls:E),Z-(I.dz?Ls:E),X+(I.dx?Ls:E),Z+(I.dz?Ls:E));}GHOLE.n.value=n;}
 
 const tileGeo = new THREE.PlaneGeometry(1,1); tileGeo.rotateX(-Math.PI/2);
 const boxGeo = new THREE.BoxGeometry(1,1,1); boxGeo.translate(0,0.5,0);
@@ -645,7 +653,7 @@ function packTex(k,srgb,rx=1,ry=rx){const im=PACK[k];if(!im)return null;const t=
 function loadPack(done){const src=window.TEXPACK||{},ks=Object.keys(src);let n=ks.length;if(!n){done();return;}
   for(const k of ks){const im=new Image();im.onload=im.onerror=()=>{if(im.naturalWidth)PACK[k]=im;if(--n===0)done();};im.src=src[k];}}
 // two samples of the same texture at different scales and angles, blended by a slow noise: hides the repeat on big surfaces
-function antiTile(m,k2){m.onBeforeCompile=sh=>{sh.fragmentShader=sh.fragmentShader.replace('#include <map_fragment>',`
+function antiTile(m,k2){m.onBeforeCompile=sh=>{if(m._obc0)m._obc0(sh);sh.fragmentShader=sh.fragmentShader.replace('#include <map_fragment>',`
   #ifdef USE_MAP
   vec2 uvA=vMapUv,uvB=mat2(.8,-.6,.6,.8)*vMapUv*${k2.toFixed(3)}+vec2(.37,.11);
   float nz=sin(vMapUv.x*.73+sin(vMapUv.y*.41)*2.)*.5+.5;
@@ -1009,7 +1017,7 @@ function roadParts(t,out){const i0=out.road.length,j0=out.bdet?out.bdet.length:0
     if(J.ix==='rbig'&&rbInfo(J)){const cx=wx(J.x),cz=wx(J.z),rc=RB_R+RB_W+.012;clipOut(out,i0,j0,(x,z)=>Math.hypot(x-cx,z-cz)>rc);}
     else if(J.ix==='slip'&&slipInfo(J)){const L=slipLanes(J);clipOut(out,i0,j0,(x,z)=>L.every(q=>q.dist(x,z)>SLIP_W+.012));}}
   // ramp terminals on an interchange approach: no sidewalk, kerb or edge line across the ramp mouths
-  if(t._ramp&&(t._ramp[4]===1||isBigIx(T(t.x+2*t._ramp[0],t.z+2*t._ramp[1])))){const[dx,dz]=t._ramp,X=wx(t.x),Z=wx(t.z),Cq=roadGeo(t).C,Jn=t._ramp[4]===1?T(t.x+dx,t.z+dz):T(t.x+2*dx,t.z+2*dz),KLn=Jn&&isKL(Jn.ixv),sT=KLn?0:1-ixTT(Jn),bw=KLn?.62:Jn&&Jn.ixv==='d'?DB_R+.13:RW+.1;
+  if(t._ramp&&!t._ramp[5]&&(t._ramp[4]===1||isBigIx(T(t.x+2*t._ramp[0],t.z+2*t._ramp[1])))){const[dx,dz]=t._ramp,X=wx(t.x),Z=wx(t.z),Cq=roadGeo(t).C,Jn=t._ramp[4]===1?T(t.x+dx,t.z+dz):T(t.x+2*dx,t.z+2*dz),KLn=Jn&&isKL(Jn.ixv),sT=KLn?0:1-ixTT(Jn),bw=KLn?.62:Jn&&Jn.ixv==='d'?DB_R+.13:RW+.1;
     if(Jn&&Jn.ixv==='x')clipBand(out,i0,j0,(x,z)=>(x-X)*dx+(z-Z)*dz,sT-.34,sT+.34,()=>true,c=>c===RCOL.yel||c===RCOL.wht);
     const sfn=(x,z)=>(x-X)*dx+(z-Z)*dz,lat=(x,z)=>Math.abs((x-X)*-dz+(z-Z)*dx);
     if(KLn){// cloverleaf / parclo: the sidewalks stay, except across the stretch where a loop or an outer ramp joins; people cross it on a zebra
@@ -1018,7 +1026,7 @@ function roadParts(t,out){const i0=out.road.length,j0=out.bdet?out.bdet.length:0
 }
     else clipBand(out,i0,j0,sfn,sT-bw,sT+bw,(x,z)=>lat(x,z)>Cq-.024,c=>c===RCOL.walk||c===RCOL.curb||c===RCOL.wht||c===RCOL.bike);}
   // a boulevard approaching an interchange: open the median at the ramp terminal so traffic can turn left there
-  if(t._ramp&&roadGeo(t).r===RT.b&&((t._ramp[4]===1&&!isKL((T(t.x+t._ramp[0],t.z+t._ramp[1])||{}).ixv))||(t._ramp[4]===2&&(T(t.x+2*t._ramp[0],t.z+2*t._ramp[1])||{}).ixv==='p'))){const[dx,dz]=t._ramp,X=wx(t.x),Z=wx(t.z),sT=t._ramp[4]-ixTT(t._ramp[4]===1?T(t.x+dx,t.z+dz):T(t.x+2*dx,t.z+2*dz)),mw=RT.b.med+.012;
+  if(t._ramp&&!t._ramp[5]&&roadGeo(t).r===RT.b&&((t._ramp[4]===1&&!isKL((T(t.x+t._ramp[0],t.z+t._ramp[1])||{}).ixv))||(t._ramp[4]===2&&(T(t.x+2*t._ramp[0],t.z+2*t._ramp[1])||{}).ixv==='p'))){const[dx,dz]=t._ramp,X=wx(t.x),Z=wx(t.z),sT=t._ramp[4]-ixTT(t._ramp[4]===1?T(t.x+dx,t.z+dz):T(t.x+2*dx,t.z+2*dz)),mw=RT.b.med+.012;
     clipOut(out,i0,j0,(x,z)=>Math.abs((x-X)*-dz+(z-Z)*dx)>=mw,c=>c===RCOL.med||c===RCOL.curb);
     // redraw the median in short pieces that follow the slope, leaving the opening
     const Jm=T(t.x+dx,t.z+dz),ow=Jm&&Jm.ixv==='k'?-1:Jm&&Jm.ixv==='d'?DB_R+.12:.19;for(let a=-.5;a<.5-1e-6;a+=.1){const b=a+.1;if(b>sT-ow&&a<sT+ow)continue;const m=(a+b)/2,px=X+dx*m,pz=Z+dz*m,h=.012+rampAt(t,px,pz),ang=Math.atan2(dx,dz),w=RT.b.med*2;
@@ -1042,6 +1050,7 @@ function clipOut(out,i0,j0,keep,only){const f=arr=>{if(!arr)return;for(const e o
 function roadParts0(t,out){
   if(t.cv){t._ramp=null;const c=G.curves&&G.curves[t.cv];if(c&&t.cvi===0)curveParts(c,out);return;}
   if(t.ix==='ichg'&&t._mOv==null){const I=ichgInfo(t);if(I){t._ramp=null;ichgParts(t,I,out);return;}}
+  if(t.ix==='gs'&&t._mOv==null){const I=gsInfo(t);if(I){t._ramp=null;gsParts(t,I,out);return;}}
   if(t.ix==='rbig'){const I=rbInfo(t);if(I){t._ramp=null;rbParts(t,I,out);return;}}
   {const NA=nodeArms(t);if(NA){t._ramp=null;nodeParts(t,NA,out);return;}}
   const X=wx(t.x),Z=wx(t.z),y=t.water?.142:.012,m=roadMask(t),{r,hw,bk,C,sw,sws}=roadGeo(t);
@@ -1062,8 +1071,13 @@ function roadParts0(t,out){
   t._ramp=null;if(!t.water&&(m===5||m===10||m===1||m===4||m===2||m===8))for(const[dx,dz]of(m&5?[[0,-1],[0,1]]:[[1,0],[-1,0]])){const nb=T(t.x+dx,t.z+dz);if(!nb||!(m&(dx?(dx>0?2:8):(dz>0?4:1))))continue;if(nb.water&&nb.road){t._ramp=[dx,dz,0,.13];break;}
       if(t.rt!=='h'&&nb.ix==='ichg'&&ichgInfo(nb)){t._ramp=[dx,dz,ICH_H/2,ICH_H,1];break;}
       const n2=T(t.x+2*dx,t.z+2*dz);if(t.rt!=='h'&&n2&&n2.ix==='ichg'&&nb.road&&!nb.cv&&nb.rt!=='h'&&roadMask(nb)===(dx?10:5)&&ichgInfo(n2)){t._ramp=[dx,dz,0,ICH_H/2,2];break;}}
+  if(!t._ramp&&!t.water&&(m===5||m===10))for(const[dx,dz]of(m===5?[[0,-1],[0,1]]:[[1,0],[-1,0]])){let hit=false;for(let k=1;k<=5;k++){const q=T(t.x+dx*k,t.z+dz*k);if(!q||!q.road)break;
+      if(q.ix==='gs'){const I=gsInfo(q);if(I&&(I.dx!==0)===(dx!==0)&&k<=I.L)t._ramp=[dx,dz,gsH(I.sp,k+.5),gsH(I.sp,k-.5),k,'gs'];hit=true;break;}if(roadNeighbors(q).length!==2)break;}if(hit&&t._ramp)break;}
+  if(t._gsLift)t._ramp=t._gsLift;
   // the road bed under a ramped approach; on a cloverleaf / parclo approach only as wide as the road (the ramps join along its sides)
-  if(t._ramp){const big=isBigIx(t._ramp[4]===1?T(t.x+t._ramp[0],t.z+t._ramp[1]):T(t.x+2*t._ramp[0],t.z+2*t._ramp[1])),w=big?2*roadGeo(t).C+.01:1;out.road.push([RB(t._ramp[0]?1:w,.008,t._ramp[0]?w:1,X,0,Z),0x8f8a80]);}
+  if(t._ramp&&t._ramp[4]!==0){const gsT=t._ramp[5]==='gs',big=!gsT&&isBigIx(t._ramp[4]===1?T(t.x+t._ramp[0],t.z+t._ramp[1]):T(t.x+2*t._ramp[0],t.z+2*t._ramp[1])),g0=roadGeo(t),Ew=big?g0.C+.006:g0.C+(g0.sws==='n'?.03:g0.sw)+.012,w=2*Ew;out.road.push([RB(t._ramp[0]?1:w,.008,t._ramp[0]?w:1,X,0,Z),0x8f8a80]);
+    // natural ground (not lifted: below the lift threshold) on both sides of the embankment or trench
+}
   // bends: the road follows a quarter circle through the tile (pavement, kerbs, sidewalks and markings), like a turning track
   if((m===3||m===6||m===12||m===9)&&!t.water&&!t._ramp&&!t.xw&&!t.bs&&!t.toll){cornerParts(t,m,X,Z,y,{r,hw,bk,C,sw,sws},out);return;}
   // asphalt: junction square plus an arm for each connection
@@ -1127,16 +1141,19 @@ function roadParts0(t,out){
   // ramp onto a bridge: lift everything on this tile along a slope (ground-level vertices stay put)
   if(t._ramp){const[dx,dz]=t._ramp;for(let i=i0;i<out.road.length;i++){const g=out.road[i][0],p=g.attributes.position;for(let k=0;k<p.count;k++){const yy=p.getY(k);if(yy>.005)p.setY(k,yy+rampAt(t,p.getX(k),p.getZ(k)));}}}
   // an interchange approach climbs on an embankment held by retaining walls (open where the slip ramps join)
-  if(t._ramp&&t._ramp[4]&&out.bdet){const[dx,dz]=t._ramp,px=-dz,pz=dx,E=isBigIx(t._ramp[4]===1?T(t.x+dx,t.z+dz):T(t.x+2*dx,t.z+2*dz))?C+.006:C+(sws==='n'?.03:sw)+.012,pos=[];
-    const seg=(a0,a1,u)=>{const n=6;for(let i=0;i<n;i++){const s0=a0+(a1-a0)*i/n,s1=a0+(a1-a0)*(i+1)/n,P0=[X+dx*s0+px*u,Z+dz*s0+pz*u],P1=[X+dx*s1+px*u,Z+dz*s1+pz*u],h0=.012+rampAt(t,P0[0],P0[1])+.006,h1=.012+rampAt(t,P1[0],P1[1])+.006;
-      pos.push(P0[0],0,P0[1],P1[0],0,P1[1],P1[0],h1,P1[1],P0[0],0,P0[1],P1[0],h1,P1[1],P0[0],h0,P0[1]);}};
+  if(t._ramp&&t._ramp[4]&&out.bdet){const[dx,dz]=t._ramp,px=-dz,pz=dx,gsT=t._ramp[5]==='gs',bigW=!gsT&&isBigIx(t._ramp[4]===1?T(t.x+dx,t.z+dz):T(t.x+2*dx,t.z+2*dz)),E=bigW?C+.006:C+(sws==='n'?.03:sw)+.012,pos=[],top=bigW?0:.006;
+    const seg=(a0,a1,u)=>{const n=6;for(let i=0;i<n;i++){const s0=a0+(a1-a0)*i/n,s1=a0+(a1-a0)*(i+1)/n,P0=[X+dx*s0+px*u,Z+dz*s0+pz*u],P1=[X+dx*s1+px*u,Z+dz*s1+pz*u],h0=.012+rampAt(t,P0[0],P0[1])+top,h1=.012+rampAt(t,P1[0],P1[1])+top;
+      let q=[P0[0],0,P0[1],P1[0],0,P1[1],P1[0],h1,P1[1],P0[0],0,P0[1],P1[0],h1,P1[1],P0[0],h0,P0[1]];
+      // face away from the road on an embankment, toward it in a cutting
+      {const ux=q[3]-q[0],uy=q[4]-q[1],uz=q[5]-q[2],vx=q[6]-q[0],vy=q[7]-q[1],vz=q[8]-q[2],nx=uy*vz-uz*vy,nz=ux*vy-uy*vx,want=Math.sign(u)*((h0+h1)/2>.012?1:-1);if((nx*px+nz*pz)*want<0)q=[q[0],q[1],q[2],q[6],q[7],q[8],q[3],q[4],q[5],q[9],q[10],q[11],q[15],q[16],q[17],q[12],q[13],q[14]];}
+      pos.push(...q);}};
     const Jw=t._ramp[4]===1?T(t.x+dx,t.z+dz):T(t.x+2*dx,t.z+2*dz),KLw=isBigIx(Jw);
-    for(const sg of[-1,1]){const u=sg*E;if(KLw){// cloverleaf / parclo: retaining walls, open where a loop neck (tile 1) or an outer ramp's terminal (tile 2) joins
-        if(t._ramp[4]===1)seg(-.5,1-klNose(Jw)-.05,u);else{const sT=2-TK;seg(-.5,sT-RW-.12,u);seg(sT+RW+.12,.5,u);}}
+    for(const sg of[-1,1]){const u=sg*E;if(gsT||KLw){// grade separation, cloverleaf / parclo: the road stands on (or in) a walled embankment all along
+        seg(-.5,.5,u);}
       else if(t._ramp[4]===1){const sT=1-ixTT(Jw);seg(-.5,sT-RW-.12,u);seg(sT+RW+.12,.5,u);}else seg(-.5,.5,u);}
     const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(pos),3));g.computeVertexNormals();out.bdet.push([g,0xbdb7ac]);
-    for(const sg of[-1,1]){const u=sg*(E+.006),a=-.5,b=.5,Q=(s2)=>[X+dx*s2+px*u,Z+dz*s2+pz*u];const p0=Q(a),p1=Q(b),h0=.012+rampAt(t,p0[0],p0[1])+.012,h1=.012+rampAt(t,p1[0],p1[1])+.012;
-      const cap=new THREE.BufferGeometry(),w2=.008;cap.setAttribute('position',new THREE.BufferAttribute(new Float32Array([p0[0]-px*w2,h0,p0[1]-pz*w2,p1[0]-px*w2,h1,p1[1]-pz*w2,p1[0]+px*w2,h1,p1[1]+pz*w2,p0[0]-px*w2,h0,p0[1]-pz*w2,p1[0]+px*w2,h1,p1[1]+pz*w2,p0[0]+px*w2,h0,p0[1]+pz*w2]),3));cap.computeVertexNormals();if(t._ramp[4]!==1&&!KLw)out.bdet.push([cap,0xd6d1c7]);}}
+    for(const sg of[-1,1]){const u=sg*(E+.006),a=-.5,b=.5,Q=(s2)=>[X+dx*s2+px*u,Z+dz*s2+pz*u];const p0=Q(a),p1=Q(b),dn=gsT&&t._ramp[3]<0,h0=dn?.016:.012+rampAt(t,p0[0],p0[1])+.012,h1=dn?.016:.012+rampAt(t,p1[0],p1[1])+.012;
+      const cap=new THREE.BufferGeometry(),w2=.008;cap.setAttribute('position',new THREE.BufferAttribute(new Float32Array([p0[0]-px*w2,h0,p0[1]-pz*w2,p1[0]-px*w2,h1,p1[1]-pz*w2,p1[0]+px*w2,h1,p1[1]+pz*w2,p0[0]-px*w2,h0,p0[1]-pz*w2,p1[0]+px*w2,h1,p1[1]+pz*w2,p0[0]+px*w2,h0,p0[1]+pz*w2]),3));cap.computeVertexNormals();if(gsT||(t._ramp[4]!==1&&!KLw))out.bdet.push([cap,0xd6d1c7]);}}
   // bridge deck and railings
   if(t.water)bridgeParts(t,m,X,Z,out);
 }
@@ -1313,18 +1330,29 @@ const xoLat=(C,sw)=>C+Math.max(.035,sw-XO_SW/2-.01);
 // junction approaches: a stop line across the incoming half and an arrow in each incoming lane; player markings (speed hump, SLOW)
 const isJn=n=>n&&n.road&&!n.cv&&roadNeighbors(n).length>=3;
 // junction control (t.ix): undefined = traffic lights, 'stop' all-way stop, 'yield' priority road (side streets give way), 'round' roundabout, 'none' uncontrolled
-const IX_OPTS=[['sig','Traffic lights'],['stop','All-way stop'],['yield','Priority road'],['round','Roundabout'],['ichg','Diamond interchange'],['dumb','Dumbbell interchange'],['clov','Cloverleaf interchange'],['parclo','Parclo interchange'],['spui','Single-point (SPUI)'],['ddi','Diverging diamond (DDI)'],['rbig','Large roundabout'],['slip','Slip lanes'],['none','No control']];let ixOpt='round';
+const IX_OPTS=[['sig','Traffic lights'],['stop','All-way stop'],['yield','Priority road'],['round','Roundabout'],['ichg','Diamond interchange'],['dumb','Dumbbell interchange'],['clov','Cloverleaf interchange'],['parclo','Parclo interchange'],['spui','Single-point (SPUI)'],['ddi','Diverging diamond (DDI)'],['fly','Flyover · 7 m'],['fly2','High flyover · 13 m'],['under','Underpass · −7 m'],['rbig','Large roundabout'],['slip','Slip lanes'],['none','No control']];let ixOpt='round';
 const IXV_OF={d:'dumb',k:'clov',p:'parclo',s:'spui',x:'ddi'},IXV_BY={dumb:'d',clov:'k',parclo:'p',spui:'s',ddi:'x',ichc:'c'},isKL=v=>v==='k'||v==='p',isBigIx=J=>!!J&&J.ix==='ichg'&&isKL(J.ixv);
 // where an interchange's ramps meet the crossing road (distance from the bridge centre)
 const ixTT=J=>!J?1.24:isKL(J.ixv)?1.30:J.ixv==='s'?.66:1.24;
-const ixOf=t=>t&&t.ix&&isJn(t)?(t.ix==='ichg'&&IXV_OF[t.ixv]||t.ix):'sig';
+const GS_K={f:'fly',h:'fly2',u:'under'},GS_OPT={fly:'f',fly2:'h',under:'u'},GS_LV={f:{h:.28,L:3},h:{h:.52,L:5},u:{h:-.28,L:3}};
+const ixOf=t=>t&&t.ix&&isJn(t)?(t.ix==='gs'?GS_K[(t.ixv||'f')[0]]||'fly':t.ix==='ichg'&&IXV_OF[t.ixv]||t.ix):'sig';
+/* grade separation (ix 'gs'): one road of a four-way crossing is raised over (flyover) or lowered under (underpass) the other; no turns there.
+   ixv = level letter (f 7 m, h 13 m, u −7 m) + axis of the road that changes height ('x' or 'z'). Its approaches climb or dip over L tiles each side. */
+const gsH=(sp,sd)=>sp.h*smo(clamp((sp.L+.5-sd)/sp.L,0,1));
+function gsInfo(J,lvk,ax){if(!J||!J.road||J.water||J.cv)return null;lvk=lvk||(J.ixv||'fx')[0];ax=ax||(J.ixv||'fx')[1];const sp=GS_LV[lvk];if(!sp||(ax!=='x'&&ax!=='z'))return null;
+  const nb=roadNeighbors(J);if(nb.length!==4)return null;const dx=ax==='x'?1:0,dz=1-dx;
+  for(const sg of[-1,1])for(let k=1;k<=sp.L;k++){const q=T(J.x+sg*dx*k,J.z+sg*dz*k);if(!q||!q.road||q.water||q.cv||q.ix||q.bs||q.xw||q.toll||q.xo||roadNeighbors(q).length!==2||roadMask(q)!==(dx?10:5))return null;}
+  for(const sg of[-1,1]){const q=T(J.x+sg*dz,J.z+sg*dx);if(!q||q.water||q.cv)return null;}
+  return{dx,dz,L:sp.L,h:sp.h,sp,ax,lvk,low:sp.h<0};}
+const isGS=t=>!!t&&t.ix==='gs';
+const gsStraight=(J,p,b)=>!isGS(J)||(b.x-J.x===J.x-p.x&&b.z-J.z===J.z-p.z);
 // the sign a driver on approach tile t sees before junction n: the player's own stop/yield sign, else what the junction type calls for
 function jSg(t,n){if(t.sg==='stop'||t.sg==='yield')return t.sg;const k=ixOf(n);if(k==='stop')return'stop';if(k==='round')return'yield';
   if(k==='yield'){const w=rtOf(t).cw;for(const q of roadNeighbors(n))if(q!==t&&rtOf(q).cw>w+1e-3)return'yield';}return null;}
 const ISLAND_R=.13,TOLL_FEE=2;
 /* ---------- highway interchange (cloverleaf): the highway runs straight underneath, the crossing road goes over it on a
    bridge, right turns use short slip ramps in the junction's corners and left turns use loop ramps on the corner land ---------- */
-const ICH_H=.24;// deck top over the highway: ~5 m clearance plus the deck
+const ICH_H=.28;// deck top over the highway: ~5.5 m clearance plus a 1.5 m girder deck (7 m)
 // axes of an interchange junction: highway direction (hx,hz) and the crossing road's tiles; null if it does not fit
 function ichgInfo(J,check,compact){if(!J||!J.road||J.water||J.cv||!isJn(J))return null;const nb=roadNeighbors(J),H=nb.filter(n=>n.rt==='h'),X=nb.filter(n=>n.rt!=='h');
   if(H.length!==2||H[0].x+H[1].x!==2*J.x||H[0].z+H[1].z!==2*J.z||!X.length||X.some(n=>n.water||n.cv))return null;const hx=Math.abs(H[0].x-J.x),hz=Math.abs(H[0].z-J.z);
@@ -1542,6 +1570,31 @@ function ichgPath(a,prev,b,p,off){const fx=a.x-prev.x,fz=a.z-prev.z,str=b.x===a.
   const k=sm(.1,.9,s/Q.L);_ppH=Q.h0+(Q.h1-Q.h0)*k;return _pp;}
 const ichgLen=(a,prev,b,off)=>{const fx=a.x-prev.x,fz=a.z-prev.z;if(b.x===a.x+fx&&b.z===a.z+fz)return 1;return ichgPoly(a,prev,b,off).L;};
 function refreshIchg(){if(!G)return;for(const t of G.tiles)if(t.icv)t.icv=null;for(const J of G.tiles)if(J.ix==='ichg'||J.ix==='rbig'||J.ix==='slip'){const I=J.ix==='ichg'?ichgInfo(J):J.ix==='rbig'?rbInfo(J):slipInfo(J);if(I)for(const c of I.stub?I.corners.concat([I.stub]):I.corners)if(c&&!c.road&&!c.b){c.icv=key(J);if(c.tree){c.tree=false;setTree(c);markDirty(c);}}}}
+// grade separation tile: the raised (or lowered) road and the other road, each drawn as a straight road, with deck, parapets and abutments
+function gsParts(J,I,out){const X=wx(J.x),Z=wx(J.z),{dx,dz,h}=I,upM=dx?10:5,loM=dx?5:10,D=(g,c)=>out.bdet.push([g,c]),P=(g,c)=>out.road.push([g,c]);
+  const ug=roadGeo(T(J.x+dx,J.z+dz)),og=roadGeo(T(J.x+dz,J.z+dx)),Eu=ug.C+(ug.sws==='n'?.03:ug.sw)+.012,Eo=og.C+(og.sws==='n'?.03:og.sw)+.012;
+  // s along the road that changes height, l across it
+  const W=(s2,l)=>[X+dx*s2-dz*l*0+dz*0+(dx?0:l),Z+dz*s2+(dx?l:0)],box=(s0,s1,l0,l1,y0,hh,c,to)=>{const a=W(s0,l0),b=W(s1,l1);(to||D)(RB(Math.abs(b[0]-a[0]),hh,Math.abs(b[1]-a[1]),(a[0]+b[0])/2,y0,(a[1]+b[1])/2),c);};
+  const sf=(x,z)=>(x-X)*dx+(z-Z)*dz,lf=(x,z)=>dx?(z-Z):(x-X);
+  // 1) the road that changes height, lifted (or lowered) as a whole; nothing of it outside its own width
+  let i0=out.road.length,j0=out.bdet.length;J._mOv=upM;J._gsLift=[dx,dz,h,h,0,'gs'];roadParts(J,out);J._mOv=null;J._gsLift=null;
+  clipBand(out,i0,j0,sf,-.6,.6,(x,z)=>Math.abs(lf(x,z))>Eu-.004,null);
+  // 2) the other road at ground level; over an underpass only its own width bridges the trench
+  i0=out.road.length;j0=out.bdet.length;J._mOv=loM;roadParts(J,out);J._mOv=null;
+  if(I.low)clipBand(out,i0,j0,lf,-Eu,Eu,(x,z)=>Math.abs(sf(x,z))>Eo-.004,null);
+  const yD=.012+Math.max(h,0);
+  if(!I.low){// flyover: girder deck over the lower road, parapets, and abutment walls closing the embankments at the tile edges
+    box(-.5,.5,-Eu,Eu,yD-.07,.065,0xb9b3a8);for(const sg of[-1,1]){box(-.5,.5,sg*Eu-.008,sg*Eu+.008,yD,.035,0xd6d1c7);box(-.5,.5,sg*(Eu-.03)-.02,sg*(Eu-.03)+.02,yD-.1,.03,0xa39d92);}
+    for(const v of[-1,1]){const s0=v*.5,s1=v*Math.max(Eo+.06,.42);box(Math.min(s0,s1),Math.max(s0,s1),-Eu-.01,Eu+.01,0,yD-.07,0xbab4a9);}
+    // the lower road keeps its ground either side under the deck
+}
+  else{// underpass: trench walls along the lowered road, ground beside it, and the other road's deck over the trench
+    const yT=.012+h;for(const sg of[-1,1]){const pos=[],l=sg*Eu;for(const[s0,s1]of[[-.5,.5]]){const A=W(s0,l),B=W(s1,l);let q=[A[0],yT,A[1],B[0],yT,B[1],B[0],.012,B[1],A[0],yT,A[1],B[0],.012,B[1],A[0],.012,A[1]];
+        {const ux=q[3]-q[0],uy=q[4]-q[1],uz=q[5]-q[2],vx=q[6]-q[0],vy=q[7]-q[1],vz=q[8]-q[2],nx=uy*vz-uz*vy,nz=ux*vy-uy*vx,C0=W(0,0),dirx=C0[0]-A[0],dirz=C0[1]-A[1];if(nx*dirx+nz*dirz<0)q=[q[0],q[1],q[2],q[6],q[7],q[8],q[3],q[4],q[5],q[9],q[10],q[11],q[15],q[16],q[17],q[12],q[13],q[14]];}pos.push(...q);}
+      const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(pos),3));g.computeVertexNormals();D(g,0xbdb7ac);
+      for(const[s0,s1]of[[-.5,-Eo],[Eo,.5]])box(s0,s1,sg*Eu-.008,sg*Eu+.008,.012,.02,0xd6d1c7);}
+    box(-Eo,Eo,-Eu,Eu,.012-.06,.055,0xb9b3a8);for(const v of[-1,1])box(v*Eo-.008,v*Eo+.008,-Eu,Eu,.012,.03,0xd6d1c7);}
+}
 // geometry: straight highway, the bridge deck with parapets and piers, ramps as raised ribbons with barriers
 function ichgParts(J,I,out){const X=wx(J.x),Z=wx(J.z),ew=I.hx===1,Xr=I.X[0],xg=roadGeo(Xr),Cc=xg.C,sw=xg.sws==='n'?0:xg.sw,D=(g,c)=>out.bdet.push([g,c]),P=(g,c)=>out.road.push([g,c]);
   J._mOv=ew?10:5;roadParts(J,out);J._mOv=null;
@@ -1674,7 +1727,7 @@ function ichgParts(J,I,out){const X=wx(J.x),Z=wx(J.z),ew=I.hx===1,Xr=I.X[0],xg=r
       out.bdet.push([new THREE.IcosahedronGeometry(.05,0).scale(1,.8,1).translate(C[0],hX(C[0],C[1])+.05,C[1]),0x3f7a35]);}}
   /* corner land keeps the natural ground */}
 function approachMarks(t,ns,C,r,hw,q,ym){const Q=(u0,v0,u1,v1,c)=>ns?q(v0,u0,v1,u1,ym,c):q(u0,v0,u1,v1,ym,c),lanes=r.lo||[r.lanes>1?.07:.085];
-  for(const d of[1,-1]){const n=ns?T(t.x,t.z+d):T(t.x+d,t.z);if(!isJn(n)||(n.ix==='ichg'&&(n.ixv==='d'||n.ixv==='k'||n.ixv==='x')))continue;
+  for(const d of[1,-1]){const n=ns?T(t.x,t.z+d):T(t.x+d,t.z);if(!isJn(n)||n.ix==='gs'||(n.ix==='ichg'&&(n.ixv==='d'||n.ixv==='k'||n.ixv==='x')))continue;
     // incoming traffic heads toward +d; its lanes are on the right of that heading
     const rs=ns?-d:d,e=d*.5,jsg=jSg(t,n),stop=jsg==='stop';Q(e-d*.06,0,e-d*(stop?.085:.075),rs*(C-.01),stop?0xffffff:RCOL.wht);
     if(jsg==='yield')for(let k=0;k<6;k++){const v=rs*(.02+k*(C-.03)/6);Q(e-d*.1,v,e-d*.12,v+rs*.018,RCOL.wht);}
@@ -3121,7 +3174,7 @@ let TL_T=21.6;
 function lightState(t,ew){if(t.ix&&t.ix!=='sig')return 0;const k=tlT();TL_T=k.T;const off=((t.x*7919+t.z*104729)%97)/97*k.T,ph=(tlTime+off)%k.T;
   if(ew)return ph<k.g?0:ph<k.g+k.a?1:2;return ph<k.half?2:ph<k.half+k.g?0:ph<k.half+k.g+k.a?1:2;}
 const _hide=new THREE.Matrix4().makeScale(0,0,0);
-function rebuildLights(){tlDirty=false;tlList=[];interSet=new Set();let ns=0,nm=0;
+function rebuildLights(){tlDirty=false;tlList=[];interSet=new Set();G._gsN=G.tiles.some(t=>t.ix==='gs');gsHoles();let ns=0,nm=0;
   let ni=0;for(const t of G.tiles){if(!t.road||t.water||t.cv)continue;const nb=roadNeighbors(t);if(nb.length<3)continue;interSet.add(key(t));if(nodeArms(t))continue;
     if(t.ix==='round'&&!t.cv&&ni<ISLMAX){dummy.position.set(wx(t.x),0,wx(t.z));dummy.rotation.set(0,(t.x*7+t.z*3)%6,0);dummy.scale.setScalar(1);dummy.updateMatrix();islandM.setMatrixAt(ni++,dummy.matrix);}
     if(t.ix&&t.ix!=='sig'&&t.ix!=='slip')continue;
@@ -3144,7 +3197,7 @@ function updateLightsTL(dt){
 }
 // position + heading along a tile: quadratic curve through the tile centre, or a looped U-turn at a dead end
 const _pp={x:0,z:0,tx:0,tz:1};
-function pathAt(a,prev,b,p,off){_cvS=null;_ppH=null;if(_pcar&&_pcar.a===a){const r=connPath(_pcar,p);if(r)return r;}if(a.ix==='ichg'&&b!==prev&&prev!==a&&!a.cv&&a._mOv==null){const I=ichgInfo(a);if(I){const r=ichgPath(a,prev,b,p,off);if(r)return r;}}if(a._cvl&&b!==prev&&a._cvT&&(a._cvT.has(prev)||a._cvT.has(b)))return tapPath(a,prev,b,p,off);if(!a.cv&&b!==prev&&prev!==a&&b!==a&&nodeArms(a)){const r=nodePath(a,prev,b,p,off);if(r)return r;}if(a._cvl&&b!==prev){const c=G.curves[a.cv];if(c&&c.S)return curvePath(c,a,prev,b,p,off);}const cx=wx(a.x),cz=wx(a.z);
+function pathAt(a,prev,b,p,off){_cvS=null;_ppH=null;if(a.ix==='gs'&&prev&&prev!==a){const I=gsInfo(a);if(I)_ppH=((a.x-prev.x)!==0)===(I.dx!==0)?I.h:0;}if(_pcar&&_pcar.a===a){const r=connPath(_pcar,p);if(r)return r;}if(a.ix==='ichg'&&b!==prev&&prev!==a&&!a.cv&&a._mOv==null){const I=ichgInfo(a);if(I){const r=ichgPath(a,prev,b,p,off);if(r)return r;}}if(a._cvl&&b!==prev&&a._cvT&&(a._cvT.has(prev)||a._cvT.has(b)))return tapPath(a,prev,b,p,off);if(!a.cv&&b!==prev&&prev!==a&&b!==a&&nodeArms(a)){const r=nodePath(a,prev,b,p,off);if(r)return r;}if(a._cvl&&b!==prev){const c=G.curves[a.cv];if(c&&c.S)return curvePath(c,a,prev,b,p,off);}const cx=wx(a.x),cz=wx(a.z);
   if(a.ix==='round'&&b!==prev&&prev!==a&&!a.cv&&isJn(a))return roundPath(a,prev,b,p,off);
   if(b===prev&&prev!==a){const ux=Math.sign(a.x-prev.x),uz=Math.sign(a.z-prev.z),nx=-uz,nz=ux,r=Math.max(.02,Math.abs(off)),d0=Math.min(.5,.95-r),La=Math.PI*r,Lt=2*d0+La,s=p*Lt,ex=cx-ux*.5,ez=cz-uz*.5;
     if(s<d0){_pp.x=ex+ux*s+nx*off;_pp.z=ez+uz*s+nz*off;_pp.tx=ux;_pp.tz=uz;}
@@ -3194,7 +3247,12 @@ const BRAKE_ON=new THREE.Color().setScalar(2.6),BRAKE_OFF=new THREE.Color(1,1,1)
 const _CF=new THREE.Frustum(),_CM=new THREE.Matrix4(),_CV=new THREE.Vector3();let exitsCache=[];
 const tileSeen=t=>_CF.containsPoint(_CV.set(wx(t.x),.1,wx(t.z)));
 const isExit=t=>t.x===0||t.z===0||t.x===N-1||t.z===N-1;
-function route(a,b,lim=40000){if(a===b)return[a];const prev=new Map([[a,null]]),q=[a];let h=0;
+function route(a,b,lim=40000){if(a===b)return[a];if(!G._gsN)return route0(a,b,lim);
+  // with grade separations: nodes are (tile, came-from) only on those crossing tiles, so no turn is ever planned there
+  const K=(t,p)=>t.ix==='gs'&&p?t.x+','+t.z+(t.x!==p.x?'x':'z'):t,prev=new Map([[a,null]]),q=[[a,null]];let h=0;
+  while(h<q.length&&q.length<lim){const[t,pt]=q[h++];const kt=K(t,pt);for(const n of roadNeighbors(t)){if(t.ix==='gs'&&pt&&!gsStraight(t,pt,n))continue;const kn=K(n,t);if(prev.has(kn))continue;prev.set(kn,[t,kt]);
+      if(n===b){const path=[b];let e=prev.get(kn);while(e){path.push(e[0]);e=prev.get(e[1]);}return path.reverse();}q.push([n,t]);}}return null;}
+function route0(a,b,lim){const prev=new Map([[a,null]]),q=[a];let h=0;
   while(h<q.length&&q.length<lim){const t=q[h++];for(const n of roadNeighbors(t)){if(prev.has(n))continue;prev.set(n,t);if(n===b){const p=[b];let c=t;while(c){p.push(c);c=prev.get(c);}return p.reverse();}q.push(n);}}return null;}
 function pickDest(from,through){if(exitsCache.length&&(through||Math.random()<.28)){const e=exitsCache[Math.floor(Math.random()*exitsCache.length)];if(e!==from)return e;}
   const r=roadsCache;return r.length?r[Math.floor(Math.random()*r.length)]:null;}
@@ -3224,7 +3282,7 @@ function nextHop0(c){if(c.x2J&&c.x2J===c.a&&c.x2&&!c.route&&roadNeighbors(c.a).i
       const r2=route(c.a,rt[rt.length-1],6000);if(r2&&r2.length>1){c.route=r2;c.ri=0;c.b=r2[1];return true;}c.route=null;c.done=true;}}
   if(c.done&&!c.emerg&&(isExit(c.a)||!tileSeen(c.a)))return false;
   if(c.emerg&&c.emDest&&c.a!==c.emDest){const r2=route(c.a,c.emDest,8000);if(r2&&r2.length>1){c.route=r2;c.ri=0;c.b=r2[1];c.done=false;return true;}}
-  let nb=roadNeighbors(c.a).filter(n=>n!==c.prev);if(!nb.length){if(isExit(c.a))return false;nb=[c.prev];}
+  let nb=roadNeighbors(c.a).filter(n=>n!==c.prev&&gsStraight(c.a,c.prev,n));if(!nb.length){if(isExit(c.a))return false;nb=[c.prev];}
   // without a route: prefer going straight on
   const sx=c.a.x-c.prev.x,sz=c.a.z-c.prev.z,st=nb.find(n=>n.x-c.a.x===sx&&n.z-c.a.z===sz);c.b=st&&Math.random()<.6?st:nb[Math.floor(Math.random()*nb.length)];return true;}
 /* ---------- ships: freighters, ferries, tugs and sailboats at sea; cargo ships call at the port ---------- */
@@ -4265,6 +4323,7 @@ const xStraight=t=>{const m=roadMask(t);return m===5||m===10;};
 function xOK(t,k){if(k==='junction'&&ixOpt==='ichc')return !!t&&ixOf(t)!=='ichc'&&!!ichgInfo(t,true,true);
   if(k==='toll')return !!t&&t.road&&t.rt==='h'&&!t.water&&!t.cv&&!t._ramp&&!t.toll&&xStraight(t)&&!isJn(t);
   if(k==='junction'&&(ixOpt==='ichg'||IXV_BY[ixOpt]))return !!t&&ixOf(t)!==ixOpt&&(()=>{const o=t.ixv;t.ixv=ixOpt==='ichg'?null:IXV_BY[ixOpt];const r=!!ichgInfo(t,true);t.ixv=o;return r;})();
+  if(k==='junction'&&GS_OPT[ixOpt])return !!t&&isJn(t)&&(!!gsInfo(t,GS_OPT[ixOpt],'x')||!!gsInfo(t,GS_OPT[ixOpt],'z'));
   if(k==='junction'&&ixOpt==='rbig')return !!t&&ixOf(t)!=='rbig'&&!!rbInfo(t,true);
   if(k==='junction'&&ixOpt==='slip')return !!t&&ixOf(t)!=='slip'&&!!slipInfo(t,true);
   if(k==='junction')return !!t&&t.road&&!t.water&&isJn(t)&&ixOf(t)!==ixOpt&&!(t.rt==='h'&&ixOpt!=='ichg'&&ixOpt!=='sig'&&ixOpt!=='none'&&false)&&!(ixOpt==='round'&&(t.rt==='h'||t._ramp||roadNeighbors(t).some(n=>n.cv)));
@@ -4278,7 +4337,10 @@ function spend(c){if(G.mode==='sandbox')return true;if(G.money<c){toast('Not eno
 function commit(list){
   list=list.filter(Boolean);const out=list.length;list=list.filter(owned);if(out&&!list.length){landHint();return;}if(!list.length)return;
   if(NETCOST[tool]){const l=netFilter(list);if(!l.length){toast(tool==='buslane'?'Bus lanes go on roads':tool==='xwalk'?'Crosswalks go on straight streets or junctions with sidewalks':tool==='busstop'?'Bus stops go on straight streets with sidewalks':tool==='mstop'?'Metro stops go on a straight stretch of metro line':tool==='toll'?'Tap a straight piece of highway':tool==='junction'?(ixOpt==='ichc'?'Tap where a highway crosses or meets a street, avenue or boulevard (no extra land needed: the turning ramps fly over the junction)':(ixOpt==='clov'||ixOpt==='parclo')?'A cloverleaf or parclo needs a full crossing (road on both sides of the highway), two straight tiles on every arm, and a clear 5×5 block of land around the junction for its loops and ramps':(ixOpt==='ichg'||IXV_BY[ixOpt])?'Tap where a highway crosses or meets a street, avenue or boulevard (the corner land and the tiles two along the highway on each side must be clear for the ramps)':ixOpt==='round'?'Roundabouts go on junctions of streets, avenues or boulevards (not highways or bridges)':(ixOpt==='slip'||ixOpt==='rbig')?ixWhy(list[0]):'Tap a junction where three or four roads meet'):tool==='roadsign'?(sgOpt==='stop'||sgOpt==='yield'?'Stop and yield signs go on a straight street right next to a junction':'Signs go on straight road tiles'):tool==='roadmark'?'Markings go on straight road tiles':XTOOLS.has(tool)?'Footbridges and underpasses go on straight streets with sidewalks':'Blocked here');Snd.play('error');return;}if(!spend(l.length*NETCOST[tool]))return;
-    l.forEach(t=>{if(XTOOLS.has(tool)){if(tool==='mstop'){t.mst=true;netT=0;}else if(tool==='toll'){t.toll=true;}else if(tool==='junction'){t.ix=ixOpt==='sig'?null:IXV_BY[ixOpt]?'ichg':ixOpt;t.ixv=IXV_BY[ixOpt]&&ixOpt!=='ichc'?IXV_BY[ixOpt]:ixOpt==='ichc'?'c':ixOpt==='slip'?((()=>{const I=slipInfo(t,true);return I&&I.free?null:'c';})()):null;for(const k in _ichC)if(k.startsWith(key(t)+'|'))delete _ichC[k];tlDirty=true;refreshIchg();for(const n of roadNeighbors(t))markDirty(n);for(const[dx,dz]of[[1,1],[1,-1],[-1,1],[-1,-1]]){const c=T(t.x+dx,t.z+dz);if(c){markDirty(c);if(t.ix==='ichg'||t.ix==='rbig'||t.ix==='slip'){c.tree=false;setTree(c);c.zone=null;}}}}else if(tool==='roadsign')t.sg=sgOpt==='none'?null:sgOpt;else if(tool==='roadmark')t.mk=mkOpt==='none'?null:mkOpt;else if(tool==='busstop')t.bs=true;else if(tool==='xwalk')t.xw=true;else t.xo=tool==='xover'?'over':'under';}else if(tool==='buslane')t.buslane=true;else{if(tool==='taxiway')t.runway='taxi';else t[tool==='metroline'?'metro':tool]=true;t.tree=false;t.zone=null;}});l.forEach(redrawAround);if(XTOOLS.has(tool))for(const t of l)for(const[dx,dz]of[[2,0],[-2,0],[0,2],[0,-2]]){const n=T(t.x+dx,t.z+dz);if(n&&n.road)markDirty(n);}if(tool==='rail'||tool==='metroline')stationsNear(l);if(tool==='roadsign'||tool==='roadmark'||tool==='junction')lampsDirty=true;if(tool!=='buslane'&&tool!=='xwalk'&&tool!=='roadsign'&&tool!=='roadmark'&&tool!=='junction')l.forEach((t,i)=>roadWork(t,i*.22));dirty=true;netT=0;Snd.play('road');}
+    l.forEach(t=>{if(XTOOLS.has(tool)){if(tool==='mstop'){t.mst=true;netT=0;}else if(tool==='toll'){t.toll=true;}else if(tool==='junction'&&GS_OPT[ixOpt]){// raise / lower the major road (tap again to swap which road changes height)
+      const lv=GS_OPT[ixOpt],nb=roadNeighbors(t),wx_=Math.max(...nb.filter(n=>n.z===t.z).map(n=>rtOf(n).cw||0)),wz_=Math.max(...nb.filter(n=>n.x===t.x).map(n=>rtOf(n).cw||0));let ax=wx_>=wz_?'x':'z';
+      if(t.ix==='gs'&&(t.ixv||'')[0]===lv)ax=(t.ixv[1]==='x')?'z':'x';if(!gsInfo(t,lv,ax))ax=ax==='x'?'z':'x';if(gsInfo(t,lv,ax)){t.ix='gs';t.ixv=lv+ax;tlDirty=true;for(let dx=-6;dx<=6;dx++)for(let dz=-6;dz<=6;dz++){if(dx&&dz&&Math.abs(dx)>1&&Math.abs(dz)>1)continue;const q=T(t.x+dx,t.z+dz);if(q)markDirty(q);}lampsDirty=true;}}
+    else if(tool==='junction'){t.ix=ixOpt==='sig'?null:IXV_BY[ixOpt]?'ichg':ixOpt;t.ixv=IXV_BY[ixOpt]&&ixOpt!=='ichc'?IXV_BY[ixOpt]:ixOpt==='ichc'?'c':ixOpt==='slip'?((()=>{const I=slipInfo(t,true);return I&&I.free?null:'c';})()):null;for(const k in _ichC)if(k.startsWith(key(t)+'|'))delete _ichC[k];tlDirty=true;refreshIchg();for(const n of roadNeighbors(t))markDirty(n);for(const[dx,dz]of[[1,1],[1,-1],[-1,1],[-1,-1]]){const c=T(t.x+dx,t.z+dz);if(c){markDirty(c);if(t.ix==='ichg'||t.ix==='rbig'||t.ix==='slip'){c.tree=false;setTree(c);c.zone=null;}}}}else if(tool==='roadsign')t.sg=sgOpt==='none'?null:sgOpt;else if(tool==='roadmark')t.mk=mkOpt==='none'?null:mkOpt;else if(tool==='busstop')t.bs=true;else if(tool==='xwalk')t.xw=true;else t.xo=tool==='xover'?'over':'under';}else if(tool==='buslane')t.buslane=true;else{if(tool==='taxiway')t.runway='taxi';else t[tool==='metroline'?'metro':tool]=true;t.tree=false;t.zone=null;}});l.forEach(redrawAround);if(XTOOLS.has(tool))for(const t of l)for(const[dx,dz]of[[2,0],[-2,0],[0,2],[0,-2]]){const n=T(t.x+dx,t.z+dz);if(n&&n.road)markDirty(n);}if(tool==='rail'||tool==='metroline')stationsNear(l);if(tool==='roadsign'||tool==='roadmark'||tool==='junction')lampsDirty=true;if(tool!=='buslane'&&tool!=='xwalk'&&tool!=='roadsign'&&tool!=='roadmark'&&tool!=='junction')l.forEach((t,i)=>roadWork(t,i*.22));dirty=true;netT=0;Snd.play('road');}
   else if(isRoadTool(tool)){const r=roadPlan(list);if(!r.add.length&&!r.up.length){toast('Already built');return;}if(!spend(r.cost))return;const rt=ROADTOOL[tool];
     for(const t of r.add){t.road=true;t.tree=false;t.zone=null;}for(const t of r.add.concat(r.up)){t.rt=rt;t.sw=rt==='h'?'n':roadOpt.sw;t.bk=rt!=='h'&&roadOpt.bk;if(rt==='h')t.buslane=false;xFix(t);}
     r.add.concat(r.up).forEach(redrawAround);r.add.concat(r.up).forEach((t,i)=>roadWork(t,i*.22));dirty=true;Snd.play('road');if(r.up.length&&!r.add.length)toast(r.up.length+' road tile'+(r.up.length>1?'s':'')+' upgraded');}
@@ -4875,6 +4937,8 @@ function ixPic(k){const rd='<path d="M0 22h48M24 0v44" stroke="#5b6168" stroke-w
   else if(k==='ichg')x='<path d="M0 22h48" stroke="#4b4d51" stroke-width="13"/><path d="M4 14Q14 14 20 6M44 14Q34 14 28 6M4 30Q14 30 20 38M44 30Q34 30 28 38" fill="none" stroke="#5b6168" stroke-width="3.5"/><path d="M24 0v44" stroke="#c9c5bc" stroke-width="12"/><path d="M24 0v44" stroke="#5b6168" stroke-width="9"/>';
   else if(k==='parclo')x='<path d="M0 22h48" stroke="#4b4d51" stroke-width="11"/><g fill="none" stroke="#5b6168" stroke-width="3.2"><circle cx="14" cy="13" r="6"/><circle cx="34" cy="31" r="6"/><path d="M2 15Q6 3 20 2M46 15Q42 3 28 2M2 29Q6 41 20 42M46 29Q42 41 28 42"/></g><path d="M24 0v44" stroke="#c9c5bc" stroke-width="9"/><path d="M24 0v44" stroke="#5b6168" stroke-width="6.5"/>';
   else if(k==='spui')x='<path d="M0 22h48" stroke="#4b4d51" stroke-width="11"/><g fill="none" stroke="#5b6168" stroke-width="3.2"><path d="M2 15Q14 15 20 9M46 15Q34 15 28 9M2 29Q14 29 20 35M46 29Q34 29 28 35"/><path d="M20 10Q24 22 28 34M28 10Q24 22 20 34" stroke-width="2.4"/></g><path d="M24 0v44" stroke="#c9c5bc" stroke-width="10" opacity=".6"/><circle cx="24" cy="22" r="3" fill="#e0b84a"/>';
+  else if(k==='fly'||k==='fly2')x='<path d="M24 0v44" stroke="#5b6168" stroke-width="11"/><path d="M0 22h48" stroke="#1a1d22" stroke-width="16" opacity=".35"/><path d="M0 20h48" stroke="#c9c5bc" stroke-width="13"/><path d="M0 20h48" stroke="#5b6168" stroke-width="10"/><path d="M4 20h8M18 20h8M32 20h8" stroke="#e8e6e0" stroke-width="1.4"/>'+(k==='fly2'?'<text x="40" y="42" font-size="9" fill="#e0b84a" font-weight="700">13</text>':'');
+  else if(k==='under')x='<path d="M0 22h48" stroke="#5b6168" stroke-width="11"/><path d="M24 0v44" stroke="#2b2e33" stroke-width="15"/><path d="M24 0v44" stroke="#5b6168" stroke-width="10"/><path d="M14 13h20M14 31h20" stroke="#c9c5bc" stroke-width="3"/>';
   else if(k==='ddi')x='<path d="M0 22h48" stroke="#4b4d51" stroke-width="11"/><g fill="none" stroke="#5b6168" stroke-width="3.2"><path d="M2 15Q12 15 17 7M46 15Q36 15 31 7M2 29Q12 29 17 37M46 29Q36 29 31 37"/></g><path d="M24 0v44" stroke="#c9c5bc" stroke-width="12"/><path d="M20 0L20 6L28 12L28 32L20 38L20 44M28 0L28 6L20 12L20 32L28 38L28 44" fill="none" stroke="#5b6168" stroke-width="3.2"/>';
   else if(k==='clov')x='<path d="M0 22h48" stroke="#4b4d51" stroke-width="11"/><g fill="none" stroke="#5b6168" stroke-width="3.2"><circle cx="15" cy="13" r="6"/><circle cx="33" cy="13" r="6"/><circle cx="15" cy="31" r="6"/><circle cx="33" cy="31" r="6"/><path d="M2 15Q6 3 20 2M46 15Q42 3 28 2M2 29Q6 41 20 42M46 29Q42 41 28 42"/></g><path d="M24 0v44" stroke="#c9c5bc" stroke-width="9"/><path d="M24 0v44" stroke="#5b6168" stroke-width="6.5"/>';
   else if(k==='dumb')x='<path d="M0 22h48" stroke="#4b4d51" stroke-width="13"/><path d="M4 14Q12 14 16 9M44 14Q36 14 32 9M4 30Q12 30 16 35M44 30Q36 30 32 35" fill="none" stroke="#5b6168" stroke-width="3.5"/><path d="M24 0v44" stroke="#c9c5bc" stroke-width="12"/><path d="M24 0v44" stroke="#5b6168" stroke-width="9"/><circle cx="24" cy="7" r="6" fill="#5b6168"/><circle cx="24" cy="7" r="2.6" fill="#6fae4f"/><circle cx="24" cy="37" r="6" fill="#5b6168"/><circle cx="24" cy="37" r="2.6" fill="#6fae4f"/>';
