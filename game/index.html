@@ -1005,9 +1005,14 @@ function roadParts(t,out){const i0=out.road.length,j0=out.bdet?out.bdet.length:0
     else if(J.ix==='slip'&&slipInfo(J)){const L=slipLanes(J);clipOut(out,i0,j0,(x,z)=>L.every(q=>q.dist(x,z)>SLIP_W+.012));}}
   // ramp terminals on an interchange approach: no sidewalk, kerb or edge line across the ramp mouths
   if(t._ramp&&(t._ramp[4]===1||isBigIx(T(t.x+2*t._ramp[0],t.z+2*t._ramp[1])))){const[dx,dz]=t._ramp,X=wx(t.x),Z=wx(t.z),Cq=roadGeo(t).C,Jn=t._ramp[4]===1?T(t.x+dx,t.z+dz):T(t.x+2*dx,t.z+2*dz),KLn=Jn&&isKL(Jn.ixv),sT=KLn?0:1-ixTT(Jn),bw=KLn?.62:Jn&&Jn.ixv==='d'?DB_R+.13:RW+.1;
-    if(KLn){const u0=t._ramp[4]===1?-.12:2-TK-RW-.14,u1=t._ramp[4]===1?.62:2-TK+RW+.14;clipBand(out,i0,j0,(x,z)=>(x-X)*dx+(z-Z)*dz,u0,u1,(x,z)=>Math.abs((x-X)*-dz+(z-Z)*dx)>Cq-.07,c=>c===RCOL.wht||c===RCOL.verge||c===RCOL.bike);}
     if(Jn&&Jn.ixv==='x')clipBand(out,i0,j0,(x,z)=>(x-X)*dx+(z-Z)*dz,sT-.34,sT+.34,()=>true,c=>c===RCOL.yel||c===RCOL.wht);
-    clipBand(out,i0,j0,(x,z)=>(x-X)*dx+(z-Z)*dz,sT-bw,sT+bw,(x,z)=>Math.abs((x-X)*-dz+(z-Z)*dx)>Cq-.024,KLn?c=>c!==0x56683a:c=>c===RCOL.walk||c===RCOL.curb||c===RCOL.wht||c===RCOL.bike);}
+    const sfn=(x,z)=>(x-X)*dx+(z-Z)*dz,lat=(x,z)=>Math.abs((x-X)*-dz+(z-Z)*dx);
+    if(KLn){// cloverleaf / parclo: the sidewalks stay, except across the stretch where a loop or an outer ramp joins; people cross it on a zebra
+      const u0=t._ramp[4]===1?-.27:2-TK-RW-.14,u1=t._ramp[4]===1?.62:2-TK+RW+.14,g=roadGeo(t),sw2=g.sws==='n'?0:g.sw;
+      clipBand(out,i0,j0,sfn,u0,u1,(x,z)=>lat(x,z)>Cq-.024,c=>c!==0x56683a);clipBand(out,i0,j0,sfn,u0,u1,(x,z)=>lat(x,z)>Cq-.07,c=>c===RCOL.wht||c===RCOL.verge||c===RCOL.bike);
+      if(sw2>.03){const pos=[];for(let u=Math.max(u0,-.5)+.02;u<Math.min(u1,.5)-.02;u+=.05)for(const sg of[-1,1]){const a0=Cq+.012,a1=Cq+sw2-.012,P0=[X+dx*u+(-dz)*sg*a0,Z+dz*u+dx*sg*a0],P1=[X+dx*(u+.026)+(-dz)*sg*a1,Z+dz*(u+.026)+dx*sg*a1],y=.012+rampAt(t,(P0[0]+P1[0])/2,(P0[1]+P1[1])/2)+.009;
+          out.road.push([HQ(Math.min(P0[0],P1[0]),Math.min(P0[1],P1[1]),Math.max(P0[0],P1[0]),Math.max(P0[1],P1[1]),y),RCOL.wht]);}}}
+    else clipBand(out,i0,j0,sfn,sT-bw,sT+bw,(x,z)=>lat(x,z)>Cq-.024,c=>c===RCOL.walk||c===RCOL.curb||c===RCOL.wht||c===RCOL.bike);}
   // a boulevard approaching an interchange: open the median at the ramp terminal so traffic can turn left there
   if(t._ramp&&roadGeo(t).r===RT.b&&((t._ramp[4]===1&&!isKL((T(t.x+t._ramp[0],t.z+t._ramp[1])||{}).ixv))||(t._ramp[4]===2&&(T(t.x+2*t._ramp[0],t.z+2*t._ramp[1])||{}).ixv==='p'))){const[dx,dz]=t._ramp,X=wx(t.x),Z=wx(t.z),sT=t._ramp[4]-ixTT(t._ramp[4]===1?T(t.x+dx,t.z+dz):T(t.x+2*dx,t.z+2*dz)),mw=RT.b.med+.012;
     clipOut(out,i0,j0,(x,z)=>Math.abs((x-X)*-dz+(z-Z)*dx)>=mw,c=>c===RCOL.med||c===RCOL.curb);
@@ -1123,7 +1128,7 @@ function roadParts0(t,out){
       pos.push(P0[0],0,P0[1],P1[0],0,P1[1],P1[0],h1,P1[1],P0[0],0,P0[1],P1[0],h1,P1[1],P0[0],h0,P0[1]);}};
     const Jw=t._ramp[4]===1?T(t.x+dx,t.z+dz):T(t.x+2*dx,t.z+2*dz),KLw=isBigIx(Jw);
     for(const sg of[-1,1]){const u=sg*E;if(KLw){// cloverleaf / parclo: retaining walls, open where a loop neck (tile 1) or an outer ramp's terminal (tile 2) joins
-        if(t._ramp[4]===1)seg(-.5,-.27,u);else{const sT=2-TK;seg(-.5,sT-RW-.12,u);seg(sT+RW+.12,.5,u);}}
+        if(t._ramp[4]===1)seg(-.5,-.29,u);else{const sT=2-TK;seg(-.5,sT-RW-.12,u);seg(sT+RW+.12,.5,u);}}
       else if(t._ramp[4]===1){const sT=1-ixTT(Jw);seg(-.5,sT-RW-.12,u);seg(sT+RW+.12,.5,u);}else seg(-.5,.5,u);}
     const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(pos),3));g.computeVertexNormals();out.bdet.push([g,0xbdb7ac]);
     for(const sg of[-1,1]){const u=sg*(E+.006),a=-.5,b=.5,Q=(s2)=>[X+dx*s2+px*u,Z+dz*s2+pz*u];const p0=Q(a),p1=Q(b),h0=.012+rampAt(t,p0[0],p0[1])+.012,h1=.012+rampAt(t,p1[0],p1[1])+.012;
@@ -1581,8 +1586,10 @@ function ichgParts(J,I,out){const X=wx(J.x),Z=wx(J.z),ew=I.hx===1,Xr=I.X[0],xg=r
         // edge lines: the outer one from the taper on, the inner one once clear of the highway; beside the crossing road the near one is a dashed merge line
         const nearRd=(E,i)=>Math.abs(E[i][0])<Cc+.03&&E[i][1]>.45,e1=mouth?j1:j1-1;
         for(const[E,E2,s0]of[[Eo,mixE(Eo,Ei,.06),ja],[Ei,mixE(Ei,Eo,.06),jb]]){band(E,E2,HH,HH,RCOL.wht,s0,e1,.0005,null,i=>!nearRd(E,i));band(E,E2,HH,HH,RCOL.wht,s0,e1,.0005,null,i=>nearRd(E,i)&&(i>>1)%2===0);}
-        if(!mouth){const Er=A.map((q,i)=>Math.abs(q[0])<Math.abs(B[i][0])?q:B[i]),sgn=Math.sign(S[j1][0])||1,dd=sgn*(Cc-.004);let f0=-1;for(let i=Math.floor((jb+j1)/2);i<=j1;i++)if(Er[i][1]>.45&&Math.abs(Er[i][0])-Cc<.13){f0=i;break;}
-          if(f0>=0){const R2=Er.map(q=>[dd,q[1]]),H2=Er.map(q=>Y0+diaH(q[1])-.0004);band(R2,Er,H2,HH,RCOL.asp,f0,j1,-.0002);}}
+        if(!mouth){const Er=A.map((q,i)=>Math.abs(q[0])<Math.abs(B[i][0])?q:B[i]),sgn=Math.sign(S[j1][0])||1,dd=sgn*(Cc-.004);let f0=-1;for(let i=Math.floor((jb+j1)/2);i<=j1;i++)if(Er[i][1]>.45&&Math.abs(Er[i][0])-Cc<.3){f0=i;break;}
+          if(f0>=0){const R2=Er.map(q=>[dd,q[1]]),H2=Er.map(q=>Y0+diaH(q[1])-.0004);band(R2,Er,H2,HH,RCOL.asp,f0,j1,-.0002);}
+          // apron from the end of the loop to the bridge deck, so no gap is left at the deck's corner
+          {const r1=Math.max(.56,S[j1][1]+.03),q=[[dd,.497],[sgn*(W+.01),.497],[sgn*(W+.01),r1],[dd,r1]].map(([a2,b2])=>pt(a2,b2)),yy=Y0+ICH_H-.0004;P(upGeo([q[0][0],yy,q[0][1],q[1][0],yy,q[1][1],q[2][0],Y0+diaH(r1)-.0004,q[2][1],q[0][0],yy,q[0][1],q[2][0],Y0+diaH(r1)-.0004,q[2][1],q[3][0],Y0+diaH(r1)-.0004,q[3][1]]),RCOL.asp);}}
         for(const[E,sg]of[[A,1],[B,-1]]){const G=[],GH=[];const WALLH=.012,isW=i=>HH[i]-Y0>WALLH;for(let i=0;i<n;i++){let w=isW(i)?.012:Math.min(.17,(HH[i]-Y0)*1.9+.01);
             // a slope must not run over another part of the same ramp (a loop's low start beside its high end): shorten it
             for(let it=0;it<6;it++){const gx=E[i][0]+NN[i][0]*sg*w,gr=E[i][1]+NN[i][1]*sg*w;let hit=false;for(let j=0;j<n;j+=2){if(Math.abs(j-i)<12)continue;if(Math.hypot(S[j][0]-gx,S[j][1]-gr)<RW+.035){hit=true;break;}}if(!hit)break;w*=.6;}
