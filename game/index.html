@@ -1573,22 +1573,22 @@ function ichgParts(J,I,out){const X=wx(J.x),Z=wx(J.z),ew=I.hx===1,Xr=I.X[0],xg=r
         let ja=j0;while(ja<j1&&ro(ja)<hwE+.004)ja++;let jb=ja;while(jb<j1&&ri(jb)<hwE+.004)jb++;
         if(aux){// like the diamond: a full-width deceleration / acceleration lane beside the highway, a dashed lane-drop line, then the ramp
           const sg0=Math.sign(S[0][0])||-1,A2=x=>x*-sg0,q=(a,r)=>pt(a*-sg0,r),wt=a=>2*RW*smo(clamp((a-KL_DA)/(KL_DF-KL_DA),0,1)),ys=.0128,N2=14,pos=[],ln=[];
-          for(let k2=0;k2<N2;k2++){const u0=KL_DA+(KL_DS-KL_DA)*k2/N2,u1=KL_DA+(KL_DS-KL_DA)*(k2+1)/N2,a0=q(u0,hwE-.004),a1=q(u1,hwE-.004),b0=q(u0,hwE+wt(u0)),b1=q(u1,hwE+wt(u1));pos.push(a0[0],ys,a0[1],b0[0],ys,b0[1],b1[0],ys,b1[1],a0[0],ys,a0[1],b1[0],ys,b1[1],a1[0],ys,a1[1]);
-            const c0=q(u0,hwE+wt(u0)-.012),c1=q(u1,hwE+wt(u1)-.012);ln.push(c0[0],ys+.0005,c0[1],b0[0],ys+.0005,b0[1],b1[0],ys+.0005,b1[1],c0[0],ys+.0005,c0[1],b1[0],ys+.0005,b1[1],c1[0],ys+.0005,c1[1]);}
+          const DE=KL_DS+.1;for(let k2=0;k2<N2;k2++){const u0=KL_DA+(DE-KL_DA)*k2/N2,u1=KL_DA+(DE-KL_DA)*(k2+1)/N2,a0=q(u0,hwE-.004),a1=q(u1,hwE-.004),b0=q(u0,hwE+wt(u0)),b1=q(u1,hwE+wt(u1));pos.push(a0[0],ys,a0[1],b0[0],ys,b0[1],b1[0],ys,b1[1],a0[0],ys,a0[1],b1[0],ys,b1[1],a1[0],ys,a1[1]);
+            const c0=q(u0,hwE+wt(u0)-.012),c1=q(u1,hwE+wt(u1)-.012);if(u1<=KL_DS+.001)ln.push(c0[0],ys+.0005,c0[1],b0[0],ys+.0005,b0[1],b1[0],ys+.0005,b1[1],c0[0],ys+.0005,c0[1],b1[0],ys+.0005,b1[1],c1[0],ys+.0005,c1[1]);}
           P(upGeo(pos),RCOL.asp);P(upGeo(ln),RCOL.wht);
           {const a=q(KL_DF,.432),b=q(KL_DS,.448);P(HQ(Math.min(a[0],b[0]),Math.min(a[1],b[1]),Math.max(a[0],b[0]),Math.max(a[1],b[1]),ys+.0003),RCOL.asp);
             for(let u=KL_DF;u<KL_DS-.04;u+=.09){const p0=q(u,.434),p1=q(u+.045,.446);P(HQ(Math.min(p0[0],p1[0]),Math.min(p0[1],p1[1]),Math.max(p0[0],p1[0]),Math.max(p0[1],p1[1]),ys+.0007),RCOL.wht);}}
-          ja=jb=Math.max(j0,S.findIndex(p2=>A2(p2[0])>=KL_DS-.002));}
+          ja=jb=Math.max(j0,S.findIndex(p2=>A2(p2[0])>=KL_DS-.002)-2);}
         let jg=jb;
         while(jg<j1&&ri(jg)-hwE<.15)jg++;
         // taper: asphalt from the highway edge out to the ramp's outer edge, the highway edge line dashed across it
         band(at(Eo,hwE-.014),Eo,HH,HH,RCOL.asp,ja,jb,0);band(at(Eo,hwE-.002),at(Eo,hwE+.008),HH,HH,RCOL.wht,ja,jb,.0006,null,i=>(i>>1)%2===0);
         // the ramp itself and the gore (asphalt between the highway edge and the ramp's inner edge) with its white border and chevrons
         band(A,B,HH,HH,RCOL.asp,jb,j1,0);band(at(Ei,hwE-.014),Ei,HH,HH,RCOL.asp,jb,jg,-.0003);band(at(Ei,hwE-.002),at(Ei,hwE+.008),HH,HH,RCOL.wht,jb,jg,.0006);
-        for(let i=jb+2;i<jg-1;i+=3){const u=Ei[i],a=pt(u[0],hwE+.008),b=pt(Ei[Math.max(jb,i-2)][0],u[1]-.006),dx=b[0]-a[0],dz=b[1]-a[1],l=Math.hypot(dx,dz)||1,w=.005,px=-dz/l*w,pz=dx/l*w,y=HH[i]+.0008;P(upGeo([a[0]+px,y,a[1]+pz,b[0]+px,y,b[1]+pz,b[0]-px,y,b[1]-pz,a[0]+px,y,a[1]+pz,b[0]-px,y,b[1]-pz,a[0]-px,y,a[1]-pz]),RCOL.wht);}
+        for(let i=jb+4;i<jg-1;i+=3){if(ri(i)-hwE<.05)continue;const u=Ei[i],a=pt(u[0],hwE+.008),b=pt(Ei[Math.max(jb,i-2)][0],u[1]-.006),dx=b[0]-a[0],dz=b[1]-a[1],l=Math.hypot(dx,dz)||1,w=.005,px=-dz/l*w,pz=dx/l*w,y=HH[i]+.0008;P(upGeo([a[0]+px,y,a[1]+pz,b[0]+px,y,b[1]+pz,b[0]-px,y,b[1]-pz,a[0]+px,y,a[1]+pz,b[0]-px,y,b[1]-pz,a[0]-px,y,a[1]-pz]),RCOL.wht);}
         // edge lines: the outer one from the taper on, the inner one once clear of the highway; beside the crossing road the near one is a dashed merge line
         const nearRd=(E,i)=>Math.abs(E[i][0])<Cc+.03&&E[i][1]>.45,e1=mouth?j1:j1-1;
-        for(const[E,E2,s0]of[[Eo,mixE(Eo,Ei,.06),ja],[Ei,mixE(Ei,Eo,.06),jb]]){band(E,E2,HH,HH,RCOL.wht,s0,e1,.0005,null,i=>!nearRd(E,i));band(E,E2,HH,HH,RCOL.wht,s0,e1,.0005,null,i=>nearRd(E,i)&&(i>>1)%2===0);}
+        let jl=jb;while(jl<j1&&ri(jl)<hwE+.012)jl++;for(const[E,E2,s0]of[[Eo,mixE(Eo,Ei,.06),ja],[Ei,mixE(Ei,Eo,.06),jl]]){band(E,E2,HH,HH,RCOL.wht,s0,e1,.0005,null,i=>!nearRd(E,i));band(E,E2,HH,HH,RCOL.wht,s0,e1,.0005,null,i=>nearRd(E,i)&&(i>>1)%2===0);}
         if(!mouth){const Er=A.map((q,i)=>Math.abs(q[0])<Math.abs(B[i][0])?q:B[i]),sgn=Math.sign(S[j1][0])||1,dd=sgn*(Cc-.004);let f0=-1;for(let i=Math.floor((jb+j1)/2);i<=j1;i++)if(Er[i][1]>.45&&Math.abs(Er[i][0])-Cc<.3){f0=i;break;}
           if(f0>=0){const fN=Math.max(f0,Er.findIndex((q,i)=>i>=f0&&Math.abs(q[0])<=Cc+.002));if(fN>=f0){const R2=Er.map(q=>[dd,q[1]]),H2=Er.map(q=>Y0+diaH(q[1])-.0004);band(R2,Er,H2,HH,RCOL.asp,fN,j1,-.0002);}}
           // apron from the end of the loop to the bridge deck, so no gap is left at the deck's corner
