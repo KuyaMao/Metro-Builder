@@ -1005,6 +1005,7 @@ function roadParts(t,out){const i0=out.road.length,j0=out.bdet?out.bdet.length:0
     else if(J.ix==='slip'&&slipInfo(J)){const L=slipLanes(J);clipOut(out,i0,j0,(x,z)=>L.every(q=>q.dist(x,z)>SLIP_W+.012));}}
   // ramp terminals on an interchange approach: no sidewalk, kerb or edge line across the ramp mouths
   if(t._ramp&&(t._ramp[4]===1||isBigIx(T(t.x+2*t._ramp[0],t.z+2*t._ramp[1])))){const[dx,dz]=t._ramp,X=wx(t.x),Z=wx(t.z),Cq=roadGeo(t).C,Jn=t._ramp[4]===1?T(t.x+dx,t.z+dz):T(t.x+2*dx,t.z+2*dz),KLn=Jn&&isKL(Jn.ixv),sT=KLn?0:1-ixTT(Jn),bw=KLn?.62:Jn&&Jn.ixv==='d'?DB_R+.13:RW+.1;
+    if(KLn){const u0=t._ramp[4]===1?-.12:2-TK-RW-.14,u1=t._ramp[4]===1?.62:2-TK+RW+.14;clipBand(out,i0,j0,(x,z)=>(x-X)*dx+(z-Z)*dz,u0,u1,(x,z)=>Math.abs((x-X)*-dz+(z-Z)*dx)>Cq-.07,c=>c===RCOL.wht||c===RCOL.verge||c===RCOL.bike);}
     if(Jn&&Jn.ixv==='x')clipBand(out,i0,j0,(x,z)=>(x-X)*dx+(z-Z)*dz,sT-.34,sT+.34,()=>true,c=>c===RCOL.yel||c===RCOL.wht);
     clipBand(out,i0,j0,(x,z)=>(x-X)*dx+(z-Z)*dz,sT-bw,sT+bw,(x,z)=>Math.abs((x-X)*-dz+(z-Z)*dx)>Cq-.024,KLn?c=>c!==0x56683a:c=>c===RCOL.walk||c===RCOL.curb||c===RCOL.wht||c===RCOL.bike);}
   // a boulevard approaching an interchange: open the median at the ramp terminal so traffic can turn left there
@@ -1406,7 +1407,7 @@ const smo=f=>f*f*(3-2*f);
 function klRise(pts,i0,iB,h1){const S=[0];for(let i=1;i<pts.length;i++)S.push(S[i-1]+Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]));const a0=S[i0],a1=S[iB];return pts.map(([d,r],i)=>i>=iB?[d,r,diaH(r)]:[d,r,h1*smo(clamp((S[i]-a0)/Math.max(1e-6,a1-a0),0,1))]);}
 // exit loop (d>0 quadrant): highway outer lane -> 270 degrees round -> crossing road lane ox
 function klLoop(ox){const P=[[.2,.345],[.5,.35],[.7,.37],[.9,.5]],[cd,cr]=KL_C,NA=20;for(let i=0;i<=NA;i++){const a=(-55+235*i/NA)*Math.PI/180;P.push([cd+Math.cos(a)*KL_R,cr+Math.sin(a)*KL_R]);}
-  const iB=P.length;P.push([.52,.88],[ox+.14,.5],[ox+.04,.2],[ox,-.15]);const k=6;return klRise(crSample(P,k),3*k,iB*k,diaH(.88));}
+  const iB=P.length;P.push([.52,.88],[ox+.1,.62],[ox+.02,.4],[ox,.15],[ox,-.15]);const k=6;return klRise(crSample(P,k),3*k,iB*k,diaH(.88));}
 // outer exit ramp (d<0 quadrant): leaves the highway on the tile before, swings round the loop and meets the crossing road square at TK
 const KL_DA=-2.5,KL_DF=-2.2,KL_DS=-1.98;
 function klOuter(e){const P=[[-2.5,.345],[-2.35,.43],[-2.2,.535],[KL_DS,RL],[-1.84,.66],[-1.76,.88],[-1.7,1.12],[-1.62,1.45],[-1.4,1.72],[-1.0,1.85],[-.62,TK],[-e-.12,TK],[-e,TK]],k=6,pts=crSample(P,k);
@@ -1580,7 +1581,7 @@ function ichgParts(J,I,out){const X=wx(J.x),Z=wx(J.z),ew=I.hx===1,Xr=I.X[0],xg=r
         // edge lines: the outer one from the taper on, the inner one once clear of the highway; beside the crossing road the near one is a dashed merge line
         const nearRd=(E,i)=>Math.abs(E[i][0])<Cc+.03&&E[i][1]>.45,e1=mouth?j1:j1-1;
         for(const[E,E2,s0]of[[Eo,mixE(Eo,Ei,.06),ja],[Ei,mixE(Ei,Eo,.06),jb]]){band(E,E2,HH,HH,RCOL.wht,s0,e1,.0005,null,i=>!nearRd(E,i));band(E,E2,HH,HH,RCOL.wht,s0,e1,.0005,null,i=>nearRd(E,i)&&(i>>1)%2===0);}
-        if(!mouth){const Er=Ei,sgn=Math.sign(S[j1][0])||1,dd=sgn*(Cc-.004);let f0=-1;for(let i=jb;i<=j1;i++)if(Er[i][1]>.45&&Er[i][1]<1.2&&Math.abs(Er[i][0])<Cc+.3&&i>jb+(j1-jb)/2){f0=i;break;}
+        if(!mouth){const Er=A.map((q,i)=>Math.abs(q[0])<Math.abs(B[i][0])?q:B[i]),sgn=Math.sign(S[j1][0])||1,dd=sgn*(Cc-.004);let f0=-1;for(let i=Math.floor((jb+j1)/2);i<=j1;i++)if(Er[i][1]>.45&&Math.abs(Er[i][0])-Cc<.13){f0=i;break;}
           if(f0>=0){const R2=Er.map(q=>[dd,q[1]]),H2=Er.map(q=>Y0+diaH(q[1])-.0004);band(R2,Er,H2,HH,RCOL.asp,f0,j1,-.0002);}}
         for(const[E,sg]of[[A,1],[B,-1]]){const G=[],GH=[];const WALLH=.012,isW=i=>HH[i]-Y0>WALLH;for(let i=0;i<n;i++){let w=isW(i)?.012:Math.min(.17,(HH[i]-Y0)*1.9+.01);
             // a slope must not run over another part of the same ramp (a loop's low start beside its high end): shorten it
@@ -1600,7 +1601,7 @@ function ichgParts(J,I,out){const X=wx(J.x),Z=wx(J.z),ew=I.hx===1,Xr=I.X[0],xg=r
               kp.push(q0[0],y0,q0[1],q1[0],y1,q1[1],w1[0],y1,w1[1],q0[0],y0,q0[1],w1[0],y1,w1[1],w0[0],y0,w0[1]);}P(upGeo(pos),RCOL.asp);P(upGeo(kp),RCOL.curb);}}
           if(stop){const a2=pt(d+sg*.002,r-RW+.012),b2=pt(d+sg*.018,r+RW-.012);P(HQ(Math.min(a2[0],b2[0]),Math.min(a2[1],b2[1]),Math.max(a2[0],b2[0]),Math.max(a2[1],b2[1]),Y0+diaH(r)+.0008),RCOL.wht);}}};
       const j0o=Math.max(0,OUT.findIndex(p=>p[1]>.3));rib(OUT,j0o,OUT.length-1,true,J.ixv==='p',true);rib(OUT.map(([d,r,h])=>[-d,r,h]),j0o,OUT.length-1,true,false,true);
-      for(const mm of J.ixv==='p'?[-1]:[1,-1]){const S=LP.map(([d,r,h])=>[mm*d,r,h]),n=S.length;let j0=Math.max(0,S.findIndex(p=>p[1]>.3)),iM=0;for(let i=0;i<n;i++)if(S[i][1]>S[iM][1])iM=i;let j1=n-1;for(let i=iM;i<n;i++)if(S[i][1]<.52){j1=i;break;}rib(S,j0,j1,false,false);
+      for(const mm of J.ixv==='p'?[-1]:[1,-1]){const S=LP.map(([d,r,h])=>[mm*d,r,h]),n=S.length;let j0=Math.max(0,S.findIndex(p=>p[1]>.3)),iM=0;for(let i=0;i<n;i++)if(S[i][1]>S[iM][1])iM=i;let j1=n-1;for(let i=iM;i<n;i++)if(S[i][1]<.56){j1=i;break;}rib(S,j0,j1,false,false);
         // the loop's island is filled up to the ramp (a grass mound), so the ramp sits on an embankment, not a rim round a pit
         {const C=[mm*KL_C[0],KL_C[1]],n2=S.length,inner=[];for(let i=j0;i<=j1;i++){const a=S[Math.max(0,i-1)],b=S[Math.min(n2-1,i+1)],td=b[0]-a[0],tr=b[1]-a[1],l=Math.hypot(td,tr)||1,nd=-tr/l,nr=td/l,qa=[S[i][0]+nd*RW,S[i][1]+nr*RW],qb=[S[i][0]-nd*RW,S[i][1]-nr*RW],q=Math.hypot(qa[0]-C[0],qa[1]-C[1])<Math.hypot(qb[0]-C[0],qb[1]-C[1])?qa:qb;
             if(i>=4*6&&i<=24*6&&Math.hypot(q[0]-C[0],q[1]-C[1])<KL_R+.02)inner.push([q,Y0+S[i][2]-.003,i]);}
